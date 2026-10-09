@@ -15,6 +15,7 @@ import { useAuth } from '@/features/auth/auth-context'
 import { useBusinessSettings, useSaveBusinessSettings, type BusinessSettings } from '@/data/settings'
 import { CURRENCIES, currencyLabel, timeZones } from '@/lib/currencies'
 import { formToSettings, previewInvoiceNumber, settingsSchema, settingsToForm, type SettingsFormValues } from './settings-form'
+import { ExportDataSection } from './export/ExportDataSection'
 import { LogoField } from './LogoField'
 
 export function SettingsPage(): ReactNode {
@@ -166,6 +167,9 @@ function SettingsForm({ settings }: { readonly settings: BusinessSettings | null
             <Textarea rows={3} {...register('default_notes')} />
           </Field>
         </FormSection>
+
+        {/* Outside the saved fields: its buttons are type="button" and never submit. */}
+        {settings ? <ExportDataSection timezone={settings.timezone} /> : null}
 
         <div className="sticky bottom-0 -mx-4 flex justify-end gap-2 border-t border-line bg-paper/95 px-4 py-3 backdrop-blur md:-mx-10 md:px-10">
           {!firstRun && isDirty ? (

@@ -53,6 +53,8 @@ jobs:
           --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
+      # backup_restore.sh needs pg_dump to match the postgres:17 service.
+      - uses: ./.github/actions/pg-client
       - run: bash supabase/tests/run.sh
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres

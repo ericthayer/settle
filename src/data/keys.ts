@@ -10,4 +10,6 @@ export const queryKeys = {
   invoices: (filters: object) => ['invoices', filters] as const,
   invoice: (id: string) => ['invoice', id] as const,
   payments: (invoiceId: string) => ['payments', invoiceId] as const,
+  // Under 'invoices' so every invoice or payment mutation that invalidates invoicesAll refreshes it.
+  dashboard: (monthStart: string) => ['invoices', 'dashboard', monthStart] as const,
 }
