@@ -29,6 +29,18 @@ export const router = createBrowserRouter([
                 lazy: async () => ({ Component: (await import('@/features/invoices/InvoicesPage')).InvoicesPage }),
               },
               {
+                path: 'invoices/new',
+                lazy: async () => ({ Component: (await import('@/features/invoices/NewInvoicePage')).NewInvoicePage }),
+              },
+              {
+                path: 'invoices/:id',
+                lazy: async () => ({ Component: (await import('@/features/invoices/InvoiceViewPage')).InvoiceViewPage }),
+              },
+              {
+                path: 'invoices/:id/edit',
+                lazy: async () => ({ Component: (await import('@/features/invoices/InvoiceBuilderPage')).InvoiceBuilderPage }),
+              },
+              {
                 path: 'clients',
                 lazy: async () => ({ Component: (await import('@/features/clients/ClientsPage')).ClientsPage }),
               },

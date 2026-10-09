@@ -1,0 +1,47 @@
+/*
+ * The invoice is a document: it always renders on light "paper", on screen and in print,
+ * using the light values of the app tokens (src/index.css).
+ */
+.invoice-paper {
+  --paper: oklch(0.985 0.004 85);
+  --surface: oklch(1 0 0);
+  --ink: oklch(0.22 0.012 160);
+  --ink-muted: oklch(0.47 0.012 160);
+  --line: oklch(0.91 0.006 85);
+  --accent: oklch(0.42 0.09 155);
+  --accent-soft: oklch(0.95 0.03 155);
+  --danger: oklch(0.52 0.17 25);
+  --danger-soft: oklch(0.96 0.03 25);
+  color: var(--ink);
+  background: var(--surface);
+}
+
+@page {
+  size: Letter;
+  margin: 0.6in;
+}
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+  [data-sonner-toaster] {
+    display: none !important;
+  }
+  .invoice-paper {
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    max-width: none !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .invoice-paper thead {
+    display: table-header-group;
+  }
+  .invoice-paper tr,
+  .invoice-paper .invoice-keep {
+    break-inside: avoid;
+  }
+}

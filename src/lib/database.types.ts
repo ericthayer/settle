@@ -321,6 +321,10 @@ export type Database = {
         }
         Returns: PaymentRow
       }
+      save_invoice_draft: {
+        Args: { p_invoice_id: string; p_invoice: Json; p_lines: Json }
+        Returns: InvoiceRow
+      }
       revert_to_draft: {
         Args: { p_invoice_id: string }
         Returns: InvoiceRow

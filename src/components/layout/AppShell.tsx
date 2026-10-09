@@ -17,14 +17,14 @@ export function AppShell(): ReactNode {
   const { signOut } = useAuth()
 
   return (
-    <div className="min-h-dvh md:grid md:grid-cols-[14rem_1fr]">
+    <div className="min-h-dvh md:grid md:grid-cols-[14rem_1fr] print:block">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-10 focus:rounded-md focus:bg-surface focus:px-3 focus:py-2"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-10 focus:rounded-md focus:bg-surface focus:px-3 focus:py-2 print:hidden"
       >
         Skip to content
       </a>
-      <header className="flex items-center justify-between border-b border-line bg-surface px-4 py-3 md:flex-col md:items-stretch md:justify-start md:gap-6 md:border-b-0 md:border-r md:py-6">
+      <header className="flex items-center justify-between print:hidden border-b border-line bg-surface px-4 py-3 md:flex-col md:items-stretch md:justify-start md:gap-6 md:border-b-0 md:border-r md:py-6">
         <Wordmark className="md:px-2" />
         <nav aria-label="Main">
           <ul className="flex gap-1 md:flex-col">
@@ -52,7 +52,7 @@ export function AppShell(): ReactNode {
           <span className="sr-only sm:not-sr-only">Sign out</span>
         </Button>
       </header>
-      <main id="main" className="mx-auto w-full max-w-6xl px-4 py-8 md:px-10">
+      <main id="main" className="mx-auto w-full max-w-6xl px-4 py-8 md:px-10 print:max-w-none print:p-0">
         <Outlet />
       </main>
     </div>
