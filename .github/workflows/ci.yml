@@ -71,6 +71,8 @@ jobs:
       # Dedicated test account; GitHub masks both values in the log.
       E2E_TEST_EMAIL: ${{ secrets.E2E_TEST_EMAIL }}
       E2E_TEST_PASSWORD: ${{ secrets.E2E_TEST_PASSWORD }}
+      # Set the repository variable E2E_STRIPE to 1 once Stripe test keys are in the function secrets.
+      E2E_STRIPE: ${{ vars.E2E_STRIPE }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

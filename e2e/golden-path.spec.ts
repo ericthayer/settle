@@ -7,6 +7,10 @@ import { cleanUpClient, invoiceSummary, testUser, testUserDb } from './support/t
  *
  * Email goes to Resend's test inbox, which accepts the message and delivers nothing.
  *
+ * With E2E_STRIPE=1 the remaining balance is paid by test card through Stripe Checkout
+ * on the shared link, and the webhook (not a manual step) marks the invoice paid.
+ * Without it, the remaining balance is recorded manually.
+ *
  * Amounts exercise half-up rounding on both a line and the tax:
  *   3 × $1,250.00          = $3,750.00
  *   2.5 × $19.99 = $49.975 → $49.98
@@ -17,6 +21,7 @@ import { cleanUpClient, invoiceSummary, testUser, testUserDb } from './support/t
 const EXPECTED = { subtotalMinor: 379_998, taxMinor: 31_350, totalMinor: 411_348 } as const
 const PARTIAL_MINOR = 100_000
 const TEST_INBOX = 'delivered@resend.dev'
+const PAY_BY_CARD = process.env.E2E_STRIPE === '1'
 
 const usd = (minor: number): string => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(minor / 100)
 
@@ -28,6 +33,23 @@ function total(scope: Locator, label: string): Locator {
 /** The status badge in the invoice toolbar (the document's stamp is a separate element). */
 function statusBadge(page: Page, label: string): Locator {
   return page.locator('main span.inline-flex > span', { hasText: new RegExp(`^${label}$`) })
+}
+
+/** Fills Stripe's hosted Checkout page with the 4242 test card and submits it. */
+async function payWithTestCard(checkout: Page): Promise<void> {
+  await expect(checkout).toHaveURL(/^https:\/\/checkout\.stripe\.com\//, { timeout: 30_000 })
+  // With several payment methods enabled, Checkout shows an accordion; pick card.
+  const cardNumber = checkout.locator('#cardNumber')
+  const cardTab = checkout.getByTestId('card-accordion-item-button')
+  await expect(cardNumber.or(cardTab).first()).toBeVisible({ timeout: 30_000 })
+  if (await cardTab.isVisible()) await cardTab.click()
+  await cardNumber.fill('4242 4242 4242 4242')
+  await checkout.locator('#cardExpiry').fill('12 / 34')
+  await checkout.locator('#cardCvc').fill('123')
+  await checkout.locator('#billingName').fill('E2E Payer')
+  const postal = checkout.locator('#billingPostalCode')
+  if (await postal.isVisible().catch(() => false)) await postal.fill('10001')
+  await checkout.getByTestId('hosted-payment-submit-button').click()
 }
 
 const runId = `${new Date().toISOString().slice(0, 19).replace(/\D/g, '')}-${Math.random().toString(36).slice(2, 6)}`
@@ -154,6 +176,7 @@ test('invoice → PDF → email → payment recorded', async ({ page, browser })
       await expect(doc).toBeVisible()
       await expect(total(doc, 'Total')).toHaveText(usd(EXPECTED.totalMinor))
       await expect(client.getByRole('button', { name: 'Download PDF' })).toBeVisible()
+      await expect(client.getByRole('button', { name: `Pay ${usd(EXPECTED.totalMinor)} by card` })).toBeVisible()
       await expect(client.getByRole('link', { name: 'Invoices' })).toBeHidden()
     } finally {
       await context.close()
@@ -188,19 +211,50 @@ test('invoice → PDF → email → payment recorded', async ({ page, browser })
     expect(reminders).toHaveLength(1)
   })
 
-  await test.step('record the remaining balance → Paid', async () => {
-    await page.getByRole('button', { name: 'Record payment' }).click()
-    const dialog = page.getByRole('dialog', { name: `Record payment for ${number}` })
-    // The amount defaults to the outstanding balance.
-    await expect(dialog.getByRole('textbox', { name: 'Amount', exact: true })).toHaveValue(((EXPECTED.totalMinor - PARTIAL_MINOR) / 100).toFixed(2))
-    await dialog.getByRole('button', { name: 'Record payment' }).click()
-    await expect(dialog).toBeHidden()
+  if (PAY_BY_CARD) {
+    await test.step('the client pays the rest by card → Paid with no manual step', async () => {
+      const remaining = EXPECTED.totalMinor - PARTIAL_MINOR
+      const context = await browser.newContext({ locale: 'en-US', timezoneId: 'UTC' })
+      try {
+        const client = await context.newPage()
+        await client.goto(new URL(`/i/${publicToken}`, page.url()).toString())
+        await client.getByRole('button', { name: `Pay ${usd(remaining)} by card` }).click()
+        await payWithTestCard(client)
+        await expect(client).toHaveURL(new RegExp(`/i/${publicToken}\\?checkout=success$`), { timeout: 60_000 })
+        await expect(client.getByRole('status').filter({ hasText: 'Payment received. Thank you!' })).toBeVisible({ timeout: 60_000 })
+        await expect(client.getByRole('button', { name: /^Pay .* by card$/ })).toBeHidden()
+      } finally {
+        await context.close()
+      }
 
-    await expect(statusBadge(page, 'Paid')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Record payment' })).toBeHidden()
-    const row = await invoiceSummary(db, invoiceId)
-    expect(row.status).toBe('paid')
-    expect(row.balance_minor).toBe(0)
-    expect(row.amount_paid_minor).toBe(EXPECTED.totalMinor)
-  })
+      const row = await invoiceSummary(db, invoiceId)
+      expect(row.status).toBe('paid')
+      expect(row.balance_minor).toBe(0)
+      const { data: card, error } = await db.from('payments').select('amount_minor, source, method, provider_ref').eq('invoice_id', invoiceId).eq('source', 'stripe')
+      if (error) throw error
+      expect(card).toHaveLength(1)
+      expect(card[0]).toMatchObject({ amount_minor: remaining, source: 'stripe', method: 'card' })
+      expect(card[0]?.provider_ref).toMatch(/^pi_/)
+
+      await page.reload()
+      await expect(statusBadge(page, 'Paid')).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Record payment' })).toBeHidden()
+    })
+  } else {
+    await test.step('record the remaining balance → Paid', async () => {
+      await page.getByRole('button', { name: 'Record payment' }).click()
+      const dialog = page.getByRole('dialog', { name: `Record payment for ${number}` })
+      // The amount defaults to the outstanding balance.
+      await expect(dialog.getByRole('textbox', { name: 'Amount', exact: true })).toHaveValue(((EXPECTED.totalMinor - PARTIAL_MINOR) / 100).toFixed(2))
+      await dialog.getByRole('button', { name: 'Record payment' }).click()
+      await expect(dialog).toBeHidden()
+
+      await expect(statusBadge(page, 'Paid')).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Record payment' })).toBeHidden()
+      const row = await invoiceSummary(db, invoiceId)
+      expect(row.status).toBe('paid')
+      expect(row.balance_minor).toBe(0)
+      expect(row.amount_paid_minor).toBe(EXPECTED.totalMinor)
+    })
+  }
 })
