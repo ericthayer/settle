@@ -22,6 +22,15 @@ npm run dev
 | `npm run typecheck` / `lint` / `test` / `build` | What CI runs |
 | `npm run db:test` | Applies `supabase/migrations` to a throwaway database and runs `supabase/tests`. Needs `DATABASE_URL` pointing at a Postgres 15+ superuser connection. |
 
+## Commits and releases
+
+Versioning is automated from [Conventional Commits](https://www.conventionalcommits.org/).
+
+- PRs are **squash-merged**; the PR title becomes the commit on `main`, and the `PR title` check enforces the format: `feat: add client form`, `fix(invoices): round tax half up`, `feat!: …` for breaking changes.
+- `feat` bumps the minor version, `fix` and `perf` bump the patch. While on `0.x`, breaking changes bump the minor version.
+- On every push to `main`, release-please updates an open release PR with the next version, `CHANGELOG.md` and `package.json`. Merging that PR tags `vX.Y.Z` and publishes a GitHub release.
+- Other types (`chore`, `docs`, `refactor`, `test`, `ci`, `build`, `style`) don't trigger a release or show in the changelog.
+
 ## Data rules
 
 - Money is integer minor units (`bigint` cents) plus an ISO currency code. `src/lib/money.ts` mirrors the SQL rounding exactly.
