@@ -1,0 +1,25 @@
+name: Release
+
+# Conventional commits on main drive versioning: release-please keeps a
+# release PR open with the next version and CHANGELOG; merging it tags vX.Y.Z
+# and publishes a GitHub release.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v5
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
