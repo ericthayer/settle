@@ -1,0 +1,87 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+
+/*
+ * Settle design tokens.
+ * Restrained ledger palette: warm paper, ink, one "settled" green accent.
+ * Semantic tokens only in components; raw values live here.
+ */
+:root {
+  --paper: oklch(0.985 0.004 85);
+  --surface: oklch(1 0 0);
+  --ink: oklch(0.22 0.012 160);
+  --ink-muted: oklch(0.47 0.012 160);
+  --line: oklch(0.91 0.006 85);
+  --accent: oklch(0.42 0.09 155);
+  --accent-ink: oklch(0.985 0.004 85);
+  --accent-soft: oklch(0.95 0.03 155);
+  --warn: oklch(0.55 0.13 65);
+  --warn-soft: oklch(0.96 0.04 80);
+  --danger: oklch(0.52 0.17 25);
+  --danger-soft: oklch(0.96 0.03 25);
+  --focus: oklch(0.55 0.12 155);
+  --radius: 0.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: oklch(0.17 0.008 160);
+    --surface: oklch(0.21 0.009 160);
+    --ink: oklch(0.95 0.006 85);
+    --ink-muted: oklch(0.72 0.01 160);
+    --line: oklch(0.3 0.01 160);
+    --accent: oklch(0.72 0.12 155);
+    --accent-ink: oklch(0.17 0.008 160);
+    --accent-soft: oklch(0.28 0.04 155);
+    --warn: oklch(0.8 0.12 75);
+    --warn-soft: oklch(0.3 0.05 75);
+    --danger: oklch(0.72 0.15 25);
+    --danger-soft: oklch(0.3 0.06 25);
+    --focus: oklch(0.72 0.12 155);
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-focus: var(--focus);
+  --radius-md: var(--radius);
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
+}
+
+@layer base {
+  html {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

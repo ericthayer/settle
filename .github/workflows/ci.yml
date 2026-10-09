@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: Typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: ci-placeholder
+      - name: No service-role key in the client bundle
+        # supabase-js itself contains the literal "sb_secret_" prefix check, so the
+        # bundle is scanned for an actual secret key value, not the prefix alone.
+        run: |
+          if grep -rniE "service_role|sb_secret_" src; then
+            echo "::error::Service-role key reference found in src/"
+            exit 1
+          fi
+          if grep -rnoE "sb_secret_[A-Za-z0-9_-]{8,}" dist; then
+            echo "::error::Secret key value found in the client bundle"
+            exit 1
+          fi
+
+  database:
+    name: Migrations and SQL tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash supabase/tests/run.sh
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
