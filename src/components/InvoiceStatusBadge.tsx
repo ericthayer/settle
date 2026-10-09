@@ -13,8 +13,14 @@ const STATUS: Record<InvoiceStatus, { label: string; tone: BadgeTone }> = {
   void: { label: 'Void', tone: 'neutral' },
 }
 
-export function InvoiceStatusBadge({ status }: { readonly status: InvoiceStatus | null }): ReactNode {
+/** Overdue outranks partially paid; a second tag keeps the partial payment visible. */
+export function InvoiceStatusBadge({ status, amountPaidMinor = 0 }: { readonly status: InvoiceStatus | null; readonly amountPaidMinor?: number | null }): ReactNode {
   if (!status) return null
   const { label, tone } = STATUS[status]
-  return <Badge tone={tone}>{label}</Badge>
+  return (
+    <span className="inline-flex flex-wrap gap-1">
+      <Badge tone={tone}>{label}</Badge>
+      {status === 'overdue' && (amountPaidMinor ?? 0) > 0 ? <Badge tone="warn">Partially paid</Badge> : null}
+    </span>
+  )
 }

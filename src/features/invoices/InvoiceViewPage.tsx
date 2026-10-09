@@ -15,6 +15,8 @@ import { todayIn } from '@/lib/dates'
 import { friendlyDbError } from '@/lib/db-errors'
 import { NotFoundPage } from '@/routes/NotFoundPage'
 import { buildEmailDraft, printAsPdf, toMailto } from './email-draft'
+import { PaymentHistory } from '@/features/payments/PaymentHistory'
+import { RecordPaymentDialog } from '@/features/payments/RecordPaymentDialog'
 import { VoidInvoiceDialog } from './VoidInvoiceDialog'
 
 export function InvoiceViewPage(): ReactNode {
@@ -38,6 +40,8 @@ export function InvoiceViewPage(): ReactNode {
   const invoiceId = invoice.id ?? ''
   const lc = invoice.lifecycle
   const hasPayments = (invoice.amount_paid_minor ?? 0) > 0
+  const balance = invoice.balance_minor ?? 0
+  const today = todayIn(settings.data?.timezone ?? 'UTC')
   const email = buildEmailDraft(model, client.data?.cc_emails ?? [])
 
   async function change(action: 'issue' | 'revert' | 'void', reason?: string): Promise<void> {
@@ -60,7 +64,7 @@ export function InvoiceViewPage(): ReactNode {
               Invoices
             </Link>
           </Button>
-          <InvoiceStatusBadge status={invoice.status} />
+          <InvoiceStatusBadge status={invoice.status} amountPaidMinor={invoice.amount_paid_minor} />
           {invoice.status === 'overdue' && invoice.days_overdue ? (
             <span className="text-sm text-danger">{invoice.days_overdue} days overdue</span>
           ) : null}
@@ -96,13 +100,23 @@ export function InvoiceViewPage(): ReactNode {
                 confirmLabel="Revert to draft"
                 onConfirm={() => void change('revert')}
                 trigger={
-                  <Button variant="ghost" disabled={hasPayments || lifecycle.isPending} title={hasPayments ? 'Delete its payments first' : undefined}>
+                  <Button variant="ghost" disabled={hasPayments || lifecycle.isPending} title={hasPayments ? 'Remove its payments first' : undefined}>
                     <Undo2 aria-hidden="true" />
                     Revert to draft
                   </Button>
                 }
               />
               <VoidInvoiceDialog number={invoice.number ?? ''} disabled={hasPayments || lifecycle.isPending} onConfirm={(reason) => void change('void', reason)} />
+              {balance > 0 ? (
+                <RecordPaymentDialog
+                  invoiceId={invoiceId}
+                  clientId={invoice.client_id ?? ''}
+                  number={invoice.number ?? ''}
+                  currency={model.currency}
+                  balanceMinor={balance}
+                  today={today}
+                />
+              ) : null}
               <Button asChild variant="secondary">
                 <a href={toMailto(email)}>
                   <Mail aria-hidden="true" />
@@ -111,16 +125,24 @@ export function InvoiceViewPage(): ReactNode {
               </Button>
             </>
           ) : null}
-          <Button variant={lc === 'issued' ? 'primary' : 'secondary'} onClick={() => printAsPdf(`${invoice.number ?? 'Draft'} – ${model.to.name}`)}>
+          <Button variant={lc === 'issued' && balance <= 0 ? 'primary' : 'secondary'} onClick={() => printAsPdf(`${invoice.number ?? 'Draft'} – ${model.to.name}`)}>
             <Download aria-hidden="true" />
             Download PDF
           </Button>
         </div>
       </div>
+      {lc === 'issued' && hasPayments ? (
+        <p className="mb-4 text-sm text-ink-muted print:hidden">To revert or void this invoice, remove its payments first.</p>
+      ) : null}
       {lc === 'issued' && !model.to.email ? (
         <p className="mb-4 text-sm text-ink-muted print:hidden">This client has no email address, so the email will open without a recipient.</p>
       ) : null}
       <InvoiceDocument model={model} logoUrl={logoUrl.data ?? null} />
+      {lc !== 'draft' ? (
+        <div className="mx-auto mt-8 max-w-[8.5in] print:hidden">
+          <PaymentHistory invoiceId={invoiceId} clientId={invoice.client_id ?? ''} editable={lc === 'issued'} />
+        </div>
+      ) : null}
       {lc === 'issued' ? (
         <p className="mt-4 text-center text-xs text-ink-muted print:hidden">
           Email opens your mail app with the message filled in. Attach the downloaded PDF before sending.
