@@ -9,4 +9,5 @@ export const queryKeys = {
   invoicesAll: ['invoices'] as const,
   invoices: (filters: object) => ['invoices', filters] as const,
   invoice: (id: string) => ['invoice', id] as const,
+  payments: (invoiceId: string) => ['payments', invoiceId] as const,
 }
