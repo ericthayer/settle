@@ -1,0 +1,21 @@
+# Supabase CLI config for local development (`supabase start`).
+# Only settings Settle depends on are listed; CLI defaults cover the rest.
+project_id = "settle"
+
+[api]
+schemas = ["public"]
+
+[db]
+major_version = 17
+
+[auth]
+site_url = "http://localhost:5173"
+# Private tool: accounts are created by invite from the dashboard, never by public sign-up.
+enable_signup = false
+
+[auth.email]
+enable_signup = false
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
