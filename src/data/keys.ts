@@ -6,4 +6,7 @@ export const queryKeys = {
   clientsAll: ['clients'] as const,
   client: (id: string) => ['client', id] as const,
   clientInvoices: (id: string) => ['client_invoices', id] as const,
+  invoicesAll: ['invoices'] as const,
+  invoices: (filters: object) => ['invoices', filters] as const,
+  invoice: (id: string) => ['invoice', id] as const,
 }
