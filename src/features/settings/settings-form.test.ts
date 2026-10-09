@@ -53,3 +53,12 @@ describe('settings form', () => {
     expect(previewInvoiceNumber('', '1', '7')).toBe('7')
   })
 })
+
+describe('next number ceiling', () => {
+  it('stays below the int range issue_invoice increments into', async () => {
+    const { MAX_NEXT_INVOICE_NUMBER } = await import('./settings-form')
+    const schema = settingsSchema(1)
+    expect(schema.safeParse({ ...settingsToForm(row), next_invoice_number: String(MAX_NEXT_INVOICE_NUMBER) }).success).toBe(true)
+    expect(schema.safeParse({ ...settingsToForm(row), next_invoice_number: '2147483647' }).success).toBe(false)
+  })
+})

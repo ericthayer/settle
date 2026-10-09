@@ -4,12 +4,14 @@ import { LoginPage } from '@/features/auth/LoginPage'
 import { NotFoundPage } from './NotFoundPage'
 import { RequireAuth } from './RequireAuth'
 import { RequireSetup } from './RequireSetup'
+import { RouteError } from './RouteError'
 
 /** Feature pages are code-split per route. */
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   {
     element: <RequireAuth />,
+    errorElement: <RouteError />,
     children: [
       {
         element: <AppShell />,

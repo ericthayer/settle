@@ -5,6 +5,9 @@ import { browserTimeZone } from '@/lib/currencies'
 import { addressSchema, nullIfBlank, optionalEmail, taxPercent, wholeNumberIn } from '@/lib/form-rules'
 import { bpsToPercentInput, percentInputToBps } from '@/lib/rates'
 
+/** next_invoice_number is a Postgres int and issue_invoice adds 1, so stay well under 2^31. */
+export const MAX_NEXT_INVOICE_NUMBER = 999_999_999
+
 export function settingsSchema(minNextNumber: number) {
   return z.object({
     business_name: z.string().trim().min(1, 'Business name is required.'),
@@ -21,7 +24,7 @@ export function settingsSchema(minNextNumber: number) {
     invoice_number_width: wholeNumberIn(1, 10, 'Enter 1 to 10 digits.'),
     next_invoice_number: wholeNumberIn(
       minNextNumber,
-      2_147_483_647,
+      MAX_NEXT_INVOICE_NUMBER,
       minNextNumber > 1 ? `Numbers only move forward. Use ${minNextNumber} or higher.` : 'Enter a whole number of 1 or more.',
     ),
     payment_instructions: z.string(),

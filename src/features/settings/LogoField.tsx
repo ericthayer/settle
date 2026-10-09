@@ -33,8 +33,15 @@ export function LogoField({ ownerId, settings }: LogoFieldProps): ReactNode {
       return
     }
     try {
-      const newPath = await upload.mutateAsync({ file, ownerId, previousPath: path })
-      await save.mutateAsync({ business_name: settings.business_name, logo_path: newPath })
+      const newPath = await upload.mutateAsync({ file, ownerId })
+      try {
+        await save.mutateAsync({ business_name: settings.business_name, logo_path: newPath })
+      } catch (error) {
+        await removeLogo(newPath).catch(() => undefined)
+        throw error
+      }
+      // Old file goes only after the row points at the new one; a failed cleanup just leaves an orphan.
+      if (path) await removeLogo(path).catch(() => undefined)
       toast.success('Logo updated')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Upload failed')
@@ -45,7 +52,7 @@ export function LogoField({ ownerId, settings }: LogoFieldProps): ReactNode {
     if (!settings || !path) return
     try {
       await save.mutateAsync({ business_name: settings.business_name, logo_path: null })
-      await removeLogo(path)
+      await removeLogo(path).catch(() => undefined)
       toast.success('Logo removed')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Couldn’t remove the logo')

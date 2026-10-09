@@ -15,10 +15,10 @@ export function validateLogo(file: File): string | null {
   return null
 }
 
-/** Uploads to `{owner_id}/logo.{ext}` (the storage policy checks the first folder) and returns the path. */
-export function useUploadLogo(): UseMutationResult<string, Error, { file: File; ownerId: string; previousPath: string | null }> {
+/** Uploads only; the caller saves the path, then removes the old file. Uploads to `{owner_id}/logo.{ext}` (the storage policy checks the first folder) and returns the path. */
+export function useUploadLogo(): UseMutationResult<string, Error, { file: File; ownerId: string }> {
   return useMutation({
-    mutationFn: async ({ file, ownerId, previousPath }) => {
+    mutationFn: async ({ file, ownerId }) => {
       const problem = validateLogo(file)
       if (problem) throw new Error(problem)
       const ext = EXT[file.type as (typeof LOGO_TYPES)[number]]
@@ -27,7 +27,6 @@ export function useUploadLogo(): UseMutationResult<string, Error, { file: File; 
       const storage = requireSupabase().storage.from(BUCKET)
       const { error } = await storage.upload(path, file, { contentType: file.type, upsert: false })
       if (error) throw error
-      if (previousPath && previousPath !== path) await storage.remove([previousPath])
       return path
     },
   })

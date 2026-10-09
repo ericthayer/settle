@@ -61,7 +61,8 @@ function SettingsForm({ settings }: { readonly settings: BusinessSettings | null
 
   async function onSubmit(values: SettingsFormValues): Promise<void> {
     try {
-      await save.mutateAsync(formToSettings(values))
+      const row = await save.mutateAsync(formToSettings(values))
+      reset(settingsToForm(row))
       if (firstRun) {
         toast.success('You’re set up. Add your first client.')
         void navigate('/clients/new')
