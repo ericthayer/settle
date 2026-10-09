@@ -45,7 +45,8 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17
+        # Same official image; the AWS mirror has no anonymous pull rate limit (Docker Hub does).
+        image: public.ecr.aws/docker/library/postgres:17
         env:
           POSTGRES_PASSWORD: postgres
         ports: ['5432:5432']
