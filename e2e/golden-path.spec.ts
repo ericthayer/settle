@@ -180,7 +180,8 @@ test('invoice → PDF → email → payment recorded', async ({ page, browser })
     const dialog = page.getByRole('dialog', { name: `Send a reminder for ${number}` })
     await dialog.getByRole('button', { name: 'Send reminder' }).click()
     await expect(dialog).toBeHidden()
-    await expect(page.getByText(/Reminder sent /)).toBeVisible()
+    // The history line, not the toast ("Reminder sent to …").
+    await expect(page.getByText(/Reminder sent [A-Z][a-z]{2} \d/)).toBeVisible()
 
     const { data: reminders, error } = await db.from('invoice_emails').select('kind').eq('invoice_id', invoiceId).eq('kind', 'reminder')
     if (error) throw error
