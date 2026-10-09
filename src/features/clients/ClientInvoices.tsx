@@ -57,7 +57,7 @@ export function ClientInvoices({ clientId, fallbackCurrency }: { readonly client
                     </Link>
                   </TableCell>
                   <TableCell>
-                    <InvoiceStatusBadge status={inv.status} />
+                    <InvoiceStatusBadge status={inv.status} amountPaidMinor={inv.amount_paid_minor} />
                   </TableCell>
                   <TableCell className="tabular text-ink-muted">{formatDate(inv.due_date)}</TableCell>
                   <TableCell className="tabular text-right">{formatMoney({ minor: inv.total_minor ?? 0, currency })}</TableCell>
