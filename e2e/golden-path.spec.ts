@@ -2,7 +2,10 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 import { cleanUpClient, invoiceSummary, testUser, testUserDb } from './support/test-user.ts'
 
 /**
- * MVP golden path: client → draft → issue → PDF totals → partial + full payment → Paid.
+ * Golden path: client → draft → issue → PDF totals → email + shared link →
+ * partial payment → reminder → full payment → Paid.
+ *
+ * Email goes to Resend's test inbox, which accepts the message and delivers nothing.
  *
  * Amounts exercise half-up rounding on both a line and the tax:
  *   3 × $1,250.00          = $3,750.00
@@ -13,6 +16,7 @@ import { cleanUpClient, invoiceSummary, testUser, testUserDb } from './support/t
  */
 const EXPECTED = { subtotalMinor: 379_998, taxMinor: 31_350, totalMinor: 411_348 } as const
 const PARTIAL_MINOR = 100_000
+const TEST_INBOX = 'delivered@resend.dev'
 
 const usd = (minor: number): string => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(minor / 100)
 
@@ -36,7 +40,7 @@ test.afterAll(async () => {
   await cleanUpClient(db, clientId)
 })
 
-test('invoice → PDF → payment recorded', async ({ page }) => {
+test('invoice → PDF → email → payment recorded', async ({ page, browser }) => {
   const user = testUser()
   const db = await testUserDb(user)
 
@@ -61,7 +65,7 @@ test('invoice → PDF → payment recorded', async ({ page }) => {
   await test.step('create a client', async () => {
     await page.goto('/clients/new')
     await page.getByLabel('Client name').fill(clientName)
-    await page.getByLabel('Email', { exact: true }).fill('billing@example.com')
+    await page.getByLabel('Email', { exact: true }).fill(TEST_INBOX)
     await page.getByRole('button', { name: 'Add client' }).click()
     await expect(page.getByRole('heading', { name: clientName })).toBeVisible()
     clientId = new URL(page.url()).pathname.split('/').pop() ?? null
@@ -122,6 +126,40 @@ test('invoice → PDF → payment recorded', async ({ page }) => {
     await page.emulateMedia({ media: 'screen' })
   })
 
+  let publicToken = ''
+
+  await test.step('email the invoice through the app', async () => {
+    await page.getByRole('button', { name: 'Email', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: `Email invoice ${number}` })
+    await expect(dialog.getByText(TEST_INBOX)).toBeVisible()
+    await dialog.getByRole('button', { name: 'Send invoice' }).click()
+    await expect(dialog).toBeHidden()
+    await expect(page.getByText(`Emailed to ${TEST_INBOX} on`)).toBeVisible()
+
+    const { data: emails, error } = await db.from('invoice_emails').select('kind, to_email').eq('invoice_id', invoiceId)
+    if (error) throw error
+    expect(emails).toEqual([{ kind: 'invoice', to_email: TEST_INBOX }])
+    const row = await invoiceSummary(db, invoiceId)
+    expect(row.sent_at).not.toBeNull()
+    expect(row.public_token).toMatch(/^[0-9a-f-]{36}$/)
+    publicToken = row.public_token ?? ''
+  })
+
+  await test.step('the client opens the shared link signed out', async () => {
+    const context = await browser.newContext({ locale: 'en-US', timezoneId: 'UTC' })
+    try {
+      const client = await context.newPage()
+      await client.goto(new URL(`/i/${publicToken}`, page.url()).toString())
+      const doc = client.getByRole('article', { name: `Invoice ${number}` })
+      await expect(doc).toBeVisible()
+      await expect(total(doc, 'Total')).toHaveText(usd(EXPECTED.totalMinor))
+      await expect(client.getByRole('button', { name: 'Download PDF' })).toBeVisible()
+      await expect(client.getByRole('link', { name: 'Invoices' })).toBeHidden()
+    } finally {
+      await context.close()
+    }
+  })
+
   await test.step('record a partial payment → Partially paid', async () => {
     await page.getByRole('button', { name: 'Record payment' }).click()
     const dialog = page.getByRole('dialog', { name: `Record payment for ${number}` })
@@ -135,6 +173,19 @@ test('invoice → PDF → payment recorded', async ({ page }) => {
     const row = await invoiceSummary(db, invoiceId)
     expect(row.status).toBe('partially_paid')
     expect(row.balance_minor).toBe(EXPECTED.totalMinor - PARTIAL_MINOR)
+  })
+
+  await test.step('send a payment reminder', async () => {
+    await page.getByRole('button', { name: 'Send reminder' }).click()
+    const dialog = page.getByRole('dialog', { name: `Send a reminder for ${number}` })
+    await dialog.getByRole('button', { name: 'Send reminder' }).click()
+    await expect(dialog).toBeHidden()
+    // The history line, not the toast ("Reminder sent to …").
+    await expect(page.getByText(/Reminder sent [A-Z][a-z]{2} \d/)).toBeVisible()
+
+    const { data: reminders, error } = await db.from('invoice_emails').select('kind').eq('invoice_id', invoiceId).eq('kind', 'reminder')
+    if (error) throw error
+    expect(reminders).toHaveLength(1)
   })
 
   await test.step('record the remaining balance → Paid', async () => {

@@ -9,6 +9,12 @@ import { RouteError } from './RouteError'
 /** Feature pages are code-split per route. */
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
+  // Shared invoice link from an email: public, outside the signed-in app.
+  {
+    path: '/i/:token',
+    errorElement: <RouteError />,
+    lazy: async () => ({ Component: (await import('@/features/public-invoice/PublicInvoicePage')).PublicInvoicePage }),
+  },
   {
     element: <RequireAuth />,
     errorElement: <RouteError />,

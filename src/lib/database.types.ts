@@ -26,6 +26,7 @@ type InvoiceRow = {
   owner_id: string
   payment_instructions: string | null
   public_token: string | null
+  sent_at: string | null
   subtotal_minor: number
   tax_minor: number
   tax_rate_bps: number
@@ -33,6 +34,18 @@ type InvoiceRow = {
   updated_at: string
   void_reason: string | null
   voided_at: string | null
+}
+
+type InvoiceEmailRow = {
+  cc_emails: string[]
+  created_at: string
+  id: string
+  invoice_id: string
+  kind: Database["public"]["Enums"]["invoice_email_kind"]
+  owner_id: string
+  provider_message_id: string | null
+  subject: string
+  to_email: string
 }
 
 type PaymentRow = {
@@ -234,6 +247,25 @@ export type Database = {
           },
         ]
       }
+      invoice_emails: {
+        Row: InvoiceEmailRow
+        Insert: Partial<InvoiceEmailRow> & {
+          invoice_id: string
+          kind: Database["public"]["Enums"]["invoice_email_kind"]
+          subject: string
+          to_email: string
+        }
+        Update: Partial<InvoiceEmailRow>
+        Relationships: [
+          {
+            foreignKeyName: "invoice_emails_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoices: {
         Row: InvoiceRow
         Insert: Partial<InvoiceRow> & { client_id: string; currency: string }
@@ -296,6 +328,14 @@ export type Database = {
         Args: { p_payment_id: string }
         Returns: PaymentRow
       }
+      ensure_public_token: {
+        Args: { p_invoice_id: string }
+        Returns: string
+      }
+      get_public_invoice: {
+        Args: { p_token: string }
+        Returns: Json
+      }
       has_succeeded_payments: {
         Args: { p_invoice_id: string }
         Returns: boolean
@@ -304,7 +344,22 @@ export type Database = {
         Args: { p_invoice_id: string; p_issue_date?: string }
         Returns: InvoiceRow
       }
+      is_shared_logo: {
+        Args: { p_path: string }
+        Returns: boolean
+      }
       lifecycle_change_allowed: { Args: never; Returns: boolean }
+      log_invoice_email: {
+        Args: {
+          p_cc: string[]
+          p_invoice_id: string
+          p_kind: Database["public"]["Enums"]["invoice_email_kind"]
+          p_provider_message_id?: string
+          p_subject: string
+          p_to: string
+        }
+        Returns: InvoiceEmailRow
+      }
       owner_today: { Args: { p_owner?: string }; Returns: string }
       recompute_invoice_totals: {
         Args: { p_invoice_id: string }
@@ -335,6 +390,7 @@ export type Database = {
       }
     }
     Enums: {
+      invoice_email_kind: "invoice" | "reminder"
       invoice_lifecycle: "draft" | "issued" | "void"
       invoice_status: "draft" | "sent" | "partially_paid" | "paid" | "overdue" | "void"
       payment_method: "bank_transfer" | "ach" | "check" | "cash" | "card" | "zelle" | "paypal" | "other"

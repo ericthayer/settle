@@ -1,6 +1,8 @@
 # End-to-end tests
 
-`golden-path.spec.ts` is the MVP gate: log in, create a client, build a two-line draft, issue it, check the printed totals against `invoice_summary` to the cent, then record a partial and a full payment.
+`golden-path.spec.ts` is the MVP gate: log in, create a client, build a two-line draft, issue it, check the printed totals against `invoice_summary` to the cent, email the invoice and open its shared link signed out, then record a partial payment, send a reminder, and record the full payment.
+
+Email goes to Resend's test inbox `delivered@resend.dev` (accepted, never delivered), so the `send-invoice-email` function must be deployed with `RESEND_API_KEY` set.
 
 It signs in as a dedicated test account, never your own. Each run uses a uniquely named client and tidies up afterwards: payments are soft-deleted, the invoice voided and the client archived (issued invoices can't be hard-deleted, so they stay as void history on the test account).
 

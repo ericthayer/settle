@@ -50,6 +50,17 @@ function str(o: JsonObject, key: string): string | null {
   return typeof v === 'string' && v.trim() !== '' ? v : null
 }
 
+/** Parties frozen on an issued invoice by issue_invoice (bill_from / bill_to snapshots). */
+export function snapshotParties(billFromJson: Json | null, billToJson: Json | null): { readonly from: Party; readonly to: Party; readonly logoPath: string | null } {
+  const billFrom = obj(billFromJson)
+  const billTo = obj(billToJson)
+  return {
+    from: { name: str(billFrom, 'business_name') ?? '', contactName: null, email: str(billFrom, 'email'), phone: str(billFrom, 'phone'), website: str(billFrom, 'website'), taxId: str(billFrom, 'tax_id'), address: parseAddress(billFrom.address) },
+    to: { name: str(billTo, 'name') ?? '', contactName: str(billTo, 'contact_name'), email: str(billTo, 'email'), phone: str(billTo, 'phone'), website: null, taxId: str(billTo, 'tax_id'), address: parseAddress(billTo.address) },
+    logoPath: str(billFrom, 'logo_path'),
+  }
+}
+
 /** Issued/void invoices print their frozen bill_to/bill_from; drafts preview live client and settings. */
 export function toDocumentModel(
   invoice: InvoiceSummary,
@@ -60,15 +71,14 @@ export function toDocumentModel(
 ): InvoiceDocumentModel {
   const draft = invoice.lifecycle === 'draft'
   const billFrom = obj(invoice.bill_from)
-  const billTo = obj(invoice.bill_to)
 
   const from: Party = draft
     ? { name: settings.business_name, contactName: null, email: settings.email, phone: settings.phone, website: settings.website, taxId: settings.tax_id, address: parseAddress(settings.address) }
-    : { name: str(billFrom, 'business_name') ?? '', contactName: null, email: str(billFrom, 'email'), phone: str(billFrom, 'phone'), website: str(billFrom, 'website'), taxId: str(billFrom, 'tax_id'), address: parseAddress(billFrom.address) }
+    : snapshotParties(invoice.bill_from, invoice.bill_to).from
 
   const to: Party = draft
     ? { name: client?.name ?? invoice.client_name ?? '', contactName: client?.contact_name ?? null, email: client?.email ?? null, phone: client?.phone ?? null, website: null, taxId: client?.tax_id ?? null, address: parseAddress(client?.billing_address) }
-    : { name: str(billTo, 'name') ?? '', contactName: str(billTo, 'contact_name'), email: str(billTo, 'email'), phone: str(billTo, 'phone'), website: null, taxId: str(billTo, 'tax_id'), address: parseAddress(billTo.address) }
+    : snapshotParties(invoice.bill_from, invoice.bill_to).to
 
   const terms = client?.payment_terms_days ?? settings.default_payment_terms_days
   const issueDate = invoice.issue_date ?? (draft ? today : null)
