@@ -86,3 +86,26 @@ Deploy the function with `supabase functions deploy send-invoice-email --no-veri
 | `APP_URL` | no | Base URL for invoice links; defaults to production |
 
 Replies go to the email address in Settings.
+
+## Card payments (Stripe)
+
+The shared invoice page (`/i/<token>`) offers **Pay by card** while an issued invoice has a balance. The `create-checkout` Edge Function opens a Stripe Checkout Session for the current balance (the amount always comes from the database). Stripe then calls `stripe-webhook`, which records the payment (`source = 'stripe'`, method Card) and the invoice moves to Paid on its own. Each payment is keyed by its PaymentIntent id (`payments.provider_ref`, unique), so Stripe retries and replays never record it twice.
+
+Deploy both functions without gateway JWT checks (one is called signed out, the other by Stripe):
+
+```bash
+supabase functions deploy create-checkout --no-verify-jwt
+supabase functions deploy stripe-webhook --no-verify-jwt
+```
+
+In Stripe → Developers → Webhooks, add an endpoint at `https://<project-ref>.supabase.co/functions/v1/stripe-webhook` for `checkout.session.completed` and `checkout.session.async_payment_succeeded`. Then set the secrets under Supabase → Edge Functions → Secrets:
+
+| Secret | Required | Value |
+|---|---|---|
+| `STRIPE_SECRET_KEY` | yes | Stripe secret key (`sk_test_…` while testing) |
+| `STRIPE_WEBHOOK_SECRET` | yes | The webhook endpoint's signing secret (`whsec_…`) |
+| `SITE_URL` | no | The app's URL for Checkout's return links; defaults to production. Its deploy previews and localhost are also allowed. |
+
+Until `STRIPE_SECRET_KEY` is set, the button answers "Card payments aren't available for this invoice yet."
+
+Refunds are made in the Stripe dashboard; remove the payment in Settle afterwards. If a client pays twice (two tabs), both payments are recorded and the balance shows the overpayment to refund.
