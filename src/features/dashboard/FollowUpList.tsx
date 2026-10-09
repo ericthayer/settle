@@ -43,7 +43,7 @@ export function FollowUpList({ items, today }: { readonly items: readonly Follow
           const balance = invoice.balance_minor ?? 0
           const draft = buildReminderDraft(invoice, reason)
           return (
-            <tr key={id} className="hover:bg-paper">
+            <tr key={id} className="hover:bg-muted/50">
               <TableCell>
                 <Link to={`/invoices/${id}`} className="tabular font-medium underline-offset-4 hover:underline">
                   {invoice.number}

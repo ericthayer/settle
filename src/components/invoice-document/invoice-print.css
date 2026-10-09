@@ -1,6 +1,6 @@
 /*
  * The invoice is a document: it always renders on light "paper", on screen and in print,
- * using the light values of the app tokens (src/index.css).
+ * with its own pinned palette and typeface, so app theme changes never alter the printed invoice.
  */
 .invoice-paper {
   --paper: oklch(0.985 0.004 85);
@@ -14,6 +14,7 @@
   --danger-soft: oklch(0.96 0.03 25);
   color: var(--ink);
   background: var(--surface);
+  font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
 }
 
 @page {

@@ -8,7 +8,7 @@ const STATUS: Record<InvoiceStatus, { label: string; tone: BadgeTone }> = {
   draft: { label: 'Draft', tone: 'neutral' },
   sent: { label: 'Sent', tone: 'neutral' },
   partially_paid: { label: 'Partially paid', tone: 'warn' },
-  paid: { label: 'Paid', tone: 'accent' },
+  paid: { label: 'Paid', tone: 'success' },
   overdue: { label: 'Overdue', tone: 'danger' },
   void: { label: 'Void', tone: 'neutral' },
 }

@@ -171,7 +171,7 @@ function SettingsForm({ settings }: { readonly settings: BusinessSettings | null
         {/* Outside the saved fields: its buttons are type="button" and never submit. */}
         {settings ? <ExportDataSection timezone={settings.timezone} /> : null}
 
-        <div className="sticky bottom-0 -mx-4 flex justify-end gap-2 border-t border-line bg-paper/95 px-4 py-3 backdrop-blur md:-mx-10 md:px-10">
+        <div className="sticky bottom-0 -mx-4 flex justify-end gap-2 border-t border-line bg-paper/95 px-4 py-3 backdrop-blur lg:-mx-6 lg:px-6">
           {!firstRun && isDirty ? (
             <Button type="button" variant="ghost" onClick={() => reset()}>
               Discard changes

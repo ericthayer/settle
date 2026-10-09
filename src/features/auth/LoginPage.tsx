@@ -34,7 +34,7 @@ export function LoginPage(): ReactNode {
   }
 
   return (
-    <main className="grid min-h-dvh place-items-center px-4">
+    <main className="grid min-h-dvh place-items-center bg-muted px-4">
       <Card className="w-full max-w-sm">
         <Wordmark className="mb-1" />
         <p className="mb-6 text-sm text-ink-muted">Your work, invoiced. Your money, tracked.</p>

@@ -48,7 +48,7 @@ export function LineItemsEditor({ form }: LineItemsEditorProps): ReactNode {
 
   return (
     <div className="@container">
-      <div aria-hidden="true" className={`hidden gap-3 px-1 pb-2 text-xs font-medium uppercase tracking-wide text-ink-muted @2xl:grid ${ROW}`}>
+      <div aria-hidden="true" className={`hidden gap-3 px-1 pb-2 text-xs font-medium text-ink-muted @2xl:grid ${ROW}`}>
         <span>Description</span>
         <span className="text-right">Qty</span>
         <span className="text-right">Unit price</span>
@@ -95,13 +95,13 @@ export function LineItemsEditor({ form }: LineItemsEditorProps): ReactNode {
                 />
                 {err?.unit_price ? <p className="mt-1 text-xs text-danger">{err.unit_price.message}</p> : null}
               </div>
-              <label className="flex h-10 items-center gap-2 text-sm @2xl:justify-center">
+              <label className="flex h-9 items-center gap-2 text-sm @2xl:justify-center">
                 <input type="checkbox" aria-label={`Line ${n} taxable`} className="size-4 accent-accent" {...register(`lines.${index}.taxable`)} />
                 <span aria-hidden="true" className="@2xl:hidden">
                   Taxable
                 </span>
               </label>
-              <output className="tabular flex h-10 items-center justify-end text-sm" aria-label={`Line ${n} amount`}>
+              <output className="tabular flex h-9 items-center justify-end text-sm" aria-label={`Line ${n} amount`}>
                 {amountFor(index)}
               </output>
               <div className="flex justify-end">

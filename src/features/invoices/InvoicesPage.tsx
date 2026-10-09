@@ -74,8 +74,8 @@ export function InvoicesPage(): ReactNode {
               aria-pressed={status === chip.value}
               onClick={() => update('status', chip.value)}
               className={cn(
-                'rounded-full border px-3 py-1 text-sm',
-                status === chip.value ? 'border-accent bg-accent-soft font-medium text-ink' : 'border-line text-ink-muted hover:bg-line/50',
+                'h-8 rounded-md border border-line px-3 text-sm shadow-xs transition-colors',
+                status === chip.value ? 'bg-muted font-medium text-ink' : 'bg-surface text-ink-muted hover:bg-muted hover:text-ink',
               )}
             >
               {chip.label}
@@ -141,7 +141,7 @@ export function InvoicesPage(): ReactNode {
               const currency = toCurrencyCode(inv.currency ?? 'USD')
               const href = inv.lifecycle === 'draft' ? `/invoices/${inv.id}/edit` : `/invoices/${inv.id}`
               return (
-                <tr key={inv.id} className="hover:bg-paper">
+                <tr key={inv.id} className="hover:bg-muted/50">
                   <TableCell>
                     <Link to={href} className="tabular font-medium underline-offset-4 hover:underline">
                       {inv.number ?? 'Draft'}

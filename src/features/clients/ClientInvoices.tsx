@@ -21,11 +21,11 @@ export function ClientInvoices({ clientId, fallbackCurrency }: { readonly client
     <FormSection title="Invoices">
       <dl className="grid grid-cols-2 gap-4 @lg:max-w-md">
         <div>
-          <dt className="text-xs uppercase tracking-wide text-ink-muted">Billed</dt>
+          <dt className="text-sm text-ink-muted">Billed</dt>
           <dd className="tabular text-lg font-medium">{formatTotals(totals, 'billedMinor', fallbackCurrency)}</dd>
         </div>
         <div>
-          <dt className="text-xs uppercase tracking-wide text-ink-muted">Paid</dt>
+          <dt className="text-sm text-ink-muted">Paid</dt>
           <dd className="tabular text-lg font-medium">{formatTotals(totals, 'paidMinor', fallbackCurrency)}</dd>
         </div>
       </dl>

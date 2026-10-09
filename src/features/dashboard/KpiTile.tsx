@@ -24,8 +24,8 @@ export function KpiTile({ label, amounts, primaryCurrency, detail, tone = 'defau
 
   const body = (
     <>
-      <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">{label}</dt>
-      <dd className={cn('tabular text-2xl font-semibold tracking-tight', alert && 'text-danger')}>
+      <dt className="text-sm text-ink-muted">{label}</dt>
+      <dd className={cn('tabular text-2xl font-semibold @[250px]/card:text-3xl', alert && 'text-danger')}>
         {first ? formatMoney({ minor: first.minor, currency: toCurrencyCode(first.currency) }) : detail}
       </dd>
       {rest.map((v) => (
@@ -33,15 +33,16 @@ export function KpiTile({ label, amounts, primaryCurrency, detail, tone = 'defau
           + {formatMoney({ minor: v.minor, currency: toCurrencyCode(v.currency) })}
         </dd>
       ))}
-      {first ? <dd className="text-sm text-ink-muted">{detail}</dd> : null}
+      {first ? <dd className="mt-auto pt-4 text-sm text-ink-muted">{detail}</dd> : null}
     </>
   )
 
-  const frame = 'flex h-full flex-col gap-1 rounded-md border border-line bg-surface p-5'
+  // shadcn section card: faint primary wash rising from the foot of the card.
+  const frame = '@container/card flex h-full flex-col gap-1.5 rounded-xl border border-line bg-surface bg-linear-to-t from-accent/5 to-surface p-6 shadow-xs dark:bg-none'
   if (!href) return <dl className={frame}>{body}</dl>
   return (
-    <Link to={href} className={cn(frame, 'transition-colors hover:border-accent/60 hover:bg-paper')}>
-      <dl className="flex flex-col gap-1">{body}</dl>
+    <Link to={href} className={cn(frame, 'transition-shadow hover:shadow-md')}>
+      <dl className="flex flex-1 flex-col gap-1.5">{body}</dl>
     </Link>
   )
 }
