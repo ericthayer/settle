@@ -1,10 +1,9 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
-import { Mail } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Table, TableCell, TableHead } from '@/components/ui/table'
 import { RecordPaymentDialog } from '@/features/payments/RecordPaymentDialog'
 import { toMailto } from '@/features/invoices/email-draft'
+import { SendEmailDialog } from '@/features/invoices/SendEmailDialog'
 import { formatDate } from '@/lib/dates'
 import { cn } from '@/lib/cn'
 import { formatMoney, toCurrencyCode } from '@/lib/money'
@@ -69,12 +68,13 @@ export function FollowUpList({ items, today }: { readonly items: readonly Follow
                     today={today}
                     size="sm"
                   />
-                  <Button asChild variant="secondary" size="sm">
-                    <a href={toMailto(draft)} aria-label={`Email ${invoice.client_name ?? 'client'} again about ${invoice.number ?? 'this invoice'}`}>
-                      <Mail aria-hidden="true" />
-                      Email again
-                    </a>
-                  </Button>
+                  <SendEmailDialog
+                    invoice={invoice}
+                    mailtoHref={toMailto(draft)}
+                    label="Email again"
+                    size="sm"
+                    ariaLabel={`Email ${invoice.client_name ?? 'client'} again about ${invoice.number ?? 'this invoice'}`}
+                  />
                 </div>
               </TableCell>
             </tr>

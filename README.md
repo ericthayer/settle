@@ -67,8 +67,22 @@ pg_restore --no-owner --single-transaction --dbname "$NEW_DB_URL" public.dump
 psql "$NEW_DB_URL" -f supabase/migrations/20261009000002_logo_storage.sql   # logo bucket policies live outside public
 ```
 
-Logo image files live in Supabase Storage, not the database, so re-upload the logo after a restore. `npm run db:test` exercises this restore path on every CI run.
+Shared invoice links also need the `logos_shared_select` storage policy from `20261009000004_invoice_email.sql` (the `do $migration$` block at its end). Logo image files live in Supabase Storage, not the database, so re-upload the logo after a restore. `npm run db:test` exercises this restore path on every CI run.
 
 ## Deploy
 
 Netlify builds `main` with `netlify.toml`. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` in the Netlify site's environment. Apply migrations with `supabase db push` (or the Supabase MCP) before deploying code that needs them.
+
+## Email
+
+Invoices and reminders are sent from the invoice view (and the dashboard follow-up list) by the `send-invoice-email` Edge Function through [Resend](https://resend.com). The email links to `/i/<token>`, a signed-out, read-only copy of the invoice where the client can save the PDF. Reminders are manual.
+
+Deploy the function with `supabase functions deploy send-invoice-email --no-verify-jwt` (it verifies the session itself), then set its secrets under Supabase → Edge Functions → Secrets:
+
+| Secret | Required | Value |
+|---|---|---|
+| `RESEND_API_KEY` | yes | Resend API key with sending access |
+| `EMAIL_FROM` | once your domain is verified | Bare address on the verified domain, e.g. `invoices@example.com`. Until then Resend's `onboarding@resend.dev` is used, which only delivers to your own Resend address and Resend test inboxes. |
+| `APP_URL` | no | Base URL for invoice links; defaults to production |
+
+Replies go to the email address in Settings.

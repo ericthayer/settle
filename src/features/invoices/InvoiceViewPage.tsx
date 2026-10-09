@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { ArrowLeft, Download, Mail, Pencil, Send, Undo2 } from 'lucide-react'
+import { ArrowLeft, Download, Pencil, Send, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { InvoiceStatusBadge } from '@/components/InvoiceStatusBadge'
 import { InvoiceDocument } from '@/components/invoice-document/InvoiceDocument'
@@ -8,6 +8,7 @@ import { toDocumentModel } from '@/components/invoice-document/document-model'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useClient } from '@/data/clients'
+import { useInvoiceEmails } from '@/data/invoice-emails'
 import { useInvoice, useInvoiceLifecycle } from '@/data/invoices'
 import { useLogoUrl } from '@/data/logo'
 import { useBusinessSettings } from '@/data/settings'
@@ -15,8 +16,10 @@ import { todayIn } from '@/lib/dates'
 import { friendlyDbError } from '@/lib/db-errors'
 import { NotFoundPage } from '@/routes/NotFoundPage'
 import { buildEmailDraft, printAsPdf, toMailto } from './email-draft'
+import { emailHistoryText, nextEmailKind } from './email-history'
 import { PaymentHistory } from '@/features/payments/PaymentHistory'
 import { RecordPaymentDialog } from '@/features/payments/RecordPaymentDialog'
+import { SendEmailDialog } from './SendEmailDialog'
 import { VoidInvoiceDialog } from './VoidInvoiceDialog'
 
 export function InvoiceViewPage(): ReactNode {
@@ -31,6 +34,7 @@ export function InvoiceViewPage(): ReactNode {
       ? toDocumentModel(detail.data.invoice, detail.data.lines, settings.data, client.data ?? null, todayIn(settings.data.timezone))
       : null
   const logoUrl = useLogoUrl(model?.logoPath)
+  const emails = useInvoiceEmails(detail.data?.invoice.lifecycle === 'draft' ? undefined : (detail.data?.invoice.id ?? undefined))
 
   if (detail.isPending || settings.isPending) return <p role="status" className="text-sm text-ink-muted">Loading…</p>
   if (detail.isError) return <p role="alert" className="text-sm text-danger">Couldn’t load invoice: {friendlyDbError(detail.error)}</p>
@@ -43,6 +47,7 @@ export function InvoiceViewPage(): ReactNode {
   const balance = invoice.balance_minor ?? 0
   const today = todayIn(settings.data?.timezone ?? 'UTC')
   const email = buildEmailDraft(model, client.data?.cc_emails ?? [])
+  const emailHistory = emailHistoryText(emails.data ?? [])
 
   async function change(action: 'issue' | 'revert' | 'void', reason?: string): Promise<void> {
     try {
@@ -117,12 +122,7 @@ export function InvoiceViewPage(): ReactNode {
                   today={today}
                 />
               ) : null}
-              <Button asChild variant="secondary">
-                <a href={toMailto(email)}>
-                  <Mail aria-hidden="true" />
-                  Email
-                </a>
-              </Button>
+              <SendEmailDialog invoice={invoice} mailtoHref={toMailto(email)} label={nextEmailKind(invoice) === 'reminder' ? 'Send reminder' : 'Email'} />
             </>
           ) : null}
           <Button variant={lc === 'issued' && balance <= 0 ? 'primary' : 'secondary'} onClick={() => printAsPdf(`${invoice.number ?? 'Draft'} – ${model.to.name}`)}>
@@ -134,8 +134,9 @@ export function InvoiceViewPage(): ReactNode {
       {lc === 'issued' && hasPayments ? (
         <p className="mb-4 text-sm text-ink-muted print:hidden">To revert or void this invoice, remove its payments first.</p>
       ) : null}
-      {lc === 'issued' && !model.to.email ? (
-        <p className="mb-4 text-sm text-ink-muted print:hidden">This client has no email address, so the email will open without a recipient.</p>
+      {lc !== 'draft' && emailHistory ? <p className="mb-4 text-sm text-ink-muted print:hidden">{emailHistory}</p> : null}
+      {lc === 'issued' && !model.to.email && !client.data?.email ? (
+        <p className="mb-4 text-sm text-ink-muted print:hidden">This client has no email address. Add one to the client to email this invoice.</p>
       ) : null}
       <InvoiceDocument model={model} logoUrl={logoUrl.data ?? null} />
       {lc !== 'draft' ? (
@@ -145,7 +146,7 @@ export function InvoiceViewPage(): ReactNode {
       ) : null}
       {lc === 'issued' ? (
         <p className="mt-4 text-center text-xs text-ink-muted print:hidden">
-          Email opens your mail app with the message filled in. Attach the downloaded PDF before sending.
+          Email sends your client a link to view this invoice and save it as a PDF.
         </p>
       ) : null}
     </>

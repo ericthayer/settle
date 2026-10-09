@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router'
 import type { InvoiceSummary } from '@/data/invoices'
@@ -8,7 +9,7 @@ import { KpiTile } from './KpiTile'
 
 function wrap(ui: ReactNode): ReactNode {
   return (
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <MemoryRouter>{ui}</MemoryRouter>
     </QueryClientProvider>
   )
@@ -41,7 +42,7 @@ describe('KpiTile', () => {
 })
 
 describe('FollowUpList', () => {
-  it('puts record payment and a reminder email on each row', () => {
+  it('puts record payment and a reminder email on each row', async () => {
     const invoice = {
       id: 'i1',
       number: 'INV-0042',
@@ -62,7 +63,11 @@ describe('FollowUpList', () => {
     if (!row) throw new Error('row missing')
     expect(within(row).getByText('10 days overdue')).toBeInTheDocument()
     expect(within(row).getByRole('button', { name: /record payment/i })).toBeInTheDocument()
-    const email = within(row).getByRole('link', { name: 'Email Acme again about INV-0042' })
-    expect(email.getAttribute('href')).toMatch(/^mailto:ap%40acme\.test\?subject=Reminder%3A%20invoice%20INV-0042%20is%20overdue/)
+    await userEvent.click(within(row).getByRole('button', { name: 'Email Acme again about INV-0042' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Email invoice INV-0042' })
+    expect(await within(dialog).findByText('ap@acme.test')).toBeInTheDocument()
+    expect(within(dialog).getByText('Invoice INV-0042 from Thayer Design')).toBeInTheDocument()
+    const mailto = within(dialog).getByRole('link', { name: 'Use my mail app instead' })
+    expect(mailto.getAttribute('href')).toMatch(/^mailto:ap%40acme\.test\?subject=Reminder%3A%20invoice%20INV-0042%20is%20overdue/)
   })
 })

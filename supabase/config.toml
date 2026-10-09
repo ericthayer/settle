@@ -19,3 +19,8 @@ enable_signup = false
 [auth.mfa.totp]
 enroll_enabled = true
 verify_enabled = true
+
+# The session is verified inside the function: the gateway's verify_jwt check
+# doesn't understand publishable keys or JWT signing keys.
+[functions.send-invoice-email]
+verify_jwt = false
