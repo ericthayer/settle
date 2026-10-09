@@ -1,60 +1,67 @@
-import type { ReactNode } from 'react'
-import { NavLink, Outlet } from 'react-router'
-import { FileText, LayoutDashboard, LogOut, Settings, Users } from 'lucide-react'
-import { Wordmark } from '@/components/Wordmark'
-import { Button } from '@/components/ui/button'
-import { useAuth } from '@/features/auth/auth-context'
+import { useEffect, useId, type ReactNode } from 'react'
+import { Outlet, useLocation } from 'react-router'
+import { Dialog } from 'radix-ui'
 import { cn } from '@/lib/cn'
+import { AppSidebar } from './AppSidebar'
+import { SiteHeader } from './SiteHeader'
+import { useSidebar } from './use-sidebar'
 
-const NAV_ITEMS = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/invoices', label: 'Invoices', icon: FileText, end: false },
-  { to: '/clients', label: 'Clients', icon: Users, end: false },
-  { to: '/settings', label: 'Settings', icon: Settings, end: false },
-] as const
-
+/** shadcn "inset" layout: sidebar on the page tint, content on a raised panel. */
 export function AppShell(): ReactNode {
-  const { signOut } = useAuth()
+  const sidebar = useSidebar()
+  const { setMobileOpen } = sidebar
+  const { pathname } = useLocation()
+  const desktopId = useId()
+
+  // Navigating from the mobile sheet closes it.
+  useEffect(() => setMobileOpen(false), [pathname, setMobileOpen])
 
   return (
-    <div className="min-h-dvh md:grid md:grid-cols-[14rem_1fr] print:block">
+    <div className="flex min-h-dvh bg-sidebar print:block print:bg-transparent">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-10 focus:rounded-md focus:bg-surface focus:px-3 focus:py-2 print:hidden"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-surface focus:px-3 focus:py-2 print:hidden"
       >
         Skip to content
       </a>
-      <header className="flex items-center justify-between print:hidden border-b border-line bg-surface px-4 py-3 md:flex-col md:items-stretch md:justify-start md:gap-6 md:border-b-0 md:border-r md:py-6">
-        <Wordmark className="md:px-2" />
-        <nav aria-label="Main">
-          <ul className="flex gap-1 md:flex-col">
-            {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
-              <li key={to}>
-                <NavLink
-                  to={to}
-                  end={end}
-                  className={({ isActive }) =>
-                    cn(
-                      'flex items-center gap-2 rounded-md px-2 py-2 text-sm text-ink-muted hover:bg-line/50 hover:text-ink',
-                      isActive && 'bg-accent-soft font-medium text-ink',
-                    )
-                  }
-                >
-                  <Icon className="size-4" aria-hidden="true" />
-                  <span className="sr-only sm:not-sr-only">{label}</span>
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <Button variant="ghost" size="sm" className="md:mt-auto md:justify-start" onClick={() => void signOut()}>
-          <LogOut aria-hidden="true" />
-          <span className="sr-only sm:not-sr-only">Sign out</span>
-        </Button>
-      </header>
-      <main id="main" className="mx-auto w-full max-w-6xl px-4 py-8 md:px-10 print:max-w-none print:p-0">
-        <Outlet />
-      </main>
+
+      <aside
+        id={desktopId}
+        aria-label="Sidebar"
+        inert={sidebar.collapsed}
+        className={cn(
+          'sticky top-0 hidden h-dvh w-64 shrink-0 transition-[margin] duration-200 ease-linear md:block print:hidden',
+          sidebar.collapsed && '-ml-64',
+        )}
+      >
+        <AppSidebar />
+      </aside>
+
+      <Dialog.Root open={sidebar.mobileOpen} onOpenChange={setMobileOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/50 md:hidden" />
+          <Dialog.Content
+            aria-describedby={undefined}
+            className="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] border-r border-sidebar-line bg-sidebar shadow-lg md:hidden"
+          >
+            <Dialog.Title className="sr-only">Sidebar</Dialog.Title>
+            <AppSidebar />
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <div
+        className={cn(
+          'flex min-w-0 flex-1 flex-col bg-paper md:m-2 md:ml-0 md:min-h-[calc(100dvh-1rem)] md:rounded-xl md:shadow-sm',
+          sidebar.collapsed && 'md:ml-2',
+          'print:m-0 print:min-h-0 print:rounded-none print:bg-transparent print:shadow-none',
+        )}
+      >
+        <SiteHeader sidebarId={desktopId} sidebarOpen={sidebar.open} onToggleSidebar={sidebar.toggle} />
+        <main id="main" className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 lg:px-6 print:max-w-none print:p-0">
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }

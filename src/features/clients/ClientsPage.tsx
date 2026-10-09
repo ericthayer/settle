@@ -93,7 +93,7 @@ function ClientTable({ clients, total }: { readonly clients: readonly Client[]; 
             </tr>
           ) : (
             clients.map((client) => (
-              <tr key={client.id} className="hover:bg-paper">
+              <tr key={client.id} className="hover:bg-muted/50">
                 <TableCell>
                   <Link to={`/clients/${client.id}`} className="font-medium text-ink underline-offset-4 hover:underline">
                     {client.name}

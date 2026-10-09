@@ -80,7 +80,7 @@ export function ClientForm({ client, settings, submitLabel, onSubmit, onCancel }
         </Field>
       </FormSection>
 
-      <div className="sticky bottom-0 -mx-4 flex justify-end gap-2 border-t border-line bg-paper/95 px-4 py-3 backdrop-blur md:-mx-10 md:px-10">
+      <div className="sticky bottom-0 -mx-4 flex justify-end gap-2 border-t border-line bg-paper/95 px-4 py-3 backdrop-blur lg:-mx-6 lg:px-6">
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>

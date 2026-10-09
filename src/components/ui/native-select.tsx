@@ -8,8 +8,8 @@ export function NativeSelect({ className, children, ...props }: ComponentProps<'
     <div className="relative">
       <select
         className={cn(
-          'h-10 w-full appearance-none rounded-md border border-line bg-surface pl-3 pr-9 text-sm text-ink',
-          'aria-invalid:border-danger disabled:cursor-not-allowed disabled:opacity-50',
+          'h-9 w-full appearance-none rounded-md border border-line bg-surface pl-3 pr-9 text-sm text-ink shadow-xs focus-visible:border-focus',
+          'aria-invalid:border-danger aria-invalid:ring-3 aria-invalid:ring-danger/20 disabled:cursor-not-allowed disabled:opacity-50',
           className,
         )}
         {...props}
