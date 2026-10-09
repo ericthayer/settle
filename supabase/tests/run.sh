@@ -38,4 +38,12 @@ else
   status=1
 fi
 
+# Runs last so the backup covers the rows the tests above created.
+if bash "$here/backup_restore.sh" "$test_url"; then
+  echo "pass     backup_restore.sh"
+else
+  echo "FAIL     backup_restore.sh"
+  status=1
+fi
+
 exit $status

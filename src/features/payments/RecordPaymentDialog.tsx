@@ -21,6 +21,7 @@ interface RecordPaymentDialogProps {
   readonly balanceMinor: number
   /** Owner's today, so "paid on" defaults to their calendar day. */
   readonly today: string
+  readonly size?: 'sm' | 'md'
 }
 
 export function RecordPaymentDialog(props: RecordPaymentDialogProps): ReactNode {
@@ -28,7 +29,7 @@ export function RecordPaymentDialog(props: RecordPaymentDialogProps): ReactNode 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
-        <Button>
+        <Button size={props.size}>
           <Banknote aria-hidden="true" />
           Record payment
         </Button>

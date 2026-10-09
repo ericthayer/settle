@@ -1,0 +1,14 @@
+name: Postgres 17 client
+description: Installs pg_dump, pg_restore and psql 17 from the PostgreSQL apt repo and puts them first on PATH. The runner's default client is older and refuses to dump a newer server.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq postgresql-common >/dev/null
+        sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null
+        sudo apt-get install -y -qq postgresql-client-17 >/dev/null
+        echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
+    - shell: bash
+      run: pg_dump --version
