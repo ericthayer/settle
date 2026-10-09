@@ -26,4 +26,9 @@ dist-ssr
 .env.*
 !.env.example
 supabase/.temp
+supabase/.branches
 .netlify
+
+# Playwright
+/test-results
+/playwright-report

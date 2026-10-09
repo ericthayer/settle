@@ -20,6 +20,7 @@ npm run dev
 |---|---|
 | `npm run dev` | Vite dev server |
 | `npm run typecheck` / `lint` / `test` / `build` | What CI runs |
+| `npm run e2e` | Playwright golden-path test (client → invoice → PDF totals → payments). Needs the test account's credentials; see `e2e/README.md`. |
 | `npm run db:test` | Applies `supabase/migrations` to a throwaway database, runs `supabase/tests`, then backs it up with `scripts/backup.sh` and checks the restore matches row for row. Needs `DATABASE_URL` pointing at a Postgres 15+ superuser connection and a `pg_dump` at least as new as the server. |
 
 ## Commits and releases
