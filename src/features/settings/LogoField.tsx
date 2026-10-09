@@ -40,8 +40,7 @@ export function LogoField({ ownerId, settings }: LogoFieldProps): ReactNode {
         await removeLogo(newPath).catch(() => undefined)
         throw error
       }
-      // Old file goes only after the row points at the new one; a failed cleanup just leaves an orphan.
-      if (path) await removeLogo(path).catch(() => undefined)
+      // Old files are kept: issued invoices snapshot logo_path and must still print it.
       toast.success('Logo updated')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Upload failed')
@@ -51,8 +50,8 @@ export function LogoField({ ownerId, settings }: LogoFieldProps): ReactNode {
   async function onRemove(): Promise<void> {
     if (!settings || !path) return
     try {
+      // File kept for issued invoices that reference it.
       await save.mutateAsync({ business_name: settings.business_name, logo_path: null })
-      await removeLogo(path).catch(() => undefined)
       toast.success('Logo removed')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Couldn’t remove the logo')

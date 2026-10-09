@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react'
+import { Link } from 'react-router'
 import { InvoiceStatusBadge } from '@/components/InvoiceStatusBadge'
 import { FormSection } from '@/components/layout/FormSection'
 import { Table, TableCell, TableHead } from '@/components/ui/table'
 import { useClientInvoices } from '@/data/clients'
+import { formatDate } from '@/lib/dates'
 import { formatMoney, toCurrencyCode } from '@/lib/money'
 import { clientTotals, formatTotals } from './client-totals'
 
@@ -47,13 +49,17 @@ export function ClientInvoices({ clientId, fallbackCurrency }: { readonly client
               return (
                 <tr key={inv.id}>
                   <TableCell>
-                    {/* Links to /invoices/:id once M2 adds the invoice view. */}
-                    <span className="tabular font-medium">{inv.number ?? 'Draft'}</span>
+                    <Link
+                      to={inv.lifecycle === 'draft' ? `/invoices/${inv.id}/edit` : `/invoices/${inv.id}`}
+                      className="tabular font-medium underline-offset-4 hover:underline"
+                    >
+                      {inv.number ?? 'Draft'}
+                    </Link>
                   </TableCell>
                   <TableCell>
                     <InvoiceStatusBadge status={inv.status} />
                   </TableCell>
-                  <TableCell className="tabular text-ink-muted">{inv.due_date ?? '—'}</TableCell>
+                  <TableCell className="tabular text-ink-muted">{formatDate(inv.due_date)}</TableCell>
                   <TableCell className="tabular text-right">{formatMoney({ minor: inv.total_minor ?? 0, currency })}</TableCell>
                   <TableCell className="tabular text-right">{formatMoney({ minor: inv.balance_minor ?? 0, currency })}</TableCell>
                 </tr>

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
-import { useNavigate, useParams } from 'react-router'
-import { Archive, ArchiveRestore } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router'
+import { Archive, ArchiveRestore, FilePlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
@@ -63,7 +63,14 @@ function ClientEditor({ client, settings }: { readonly client: Client | null; re
         actions={
           client ? (
             <div className="flex items-center gap-3">
-              {archived ? <Badge>Archived</Badge> : null}
+              {archived ? <Badge>Archived</Badge> : (
+                <Button asChild>
+                  <Link to={`/invoices/new?client=${client.id}`}>
+                    <FilePlus aria-hidden="true" />
+                    New invoice
+                  </Link>
+                </Button>
+              )}
               {archived ? (
                 <Button variant="secondary" disabled={setArchived.isPending} onClick={() => toggleArchived(false)}>
                   <ArchiveRestore aria-hidden="true" />
