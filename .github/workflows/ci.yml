@@ -58,3 +58,32 @@ jobs:
       - run: bash supabase/tests/run.sh
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+
+  e2e:
+    name: Golden-path e2e
+    needs: [app, database]
+    runs-on: ubuntu-latest
+    env:
+      # Public by design: the same values ship in the production bundle, and RLS guards every table.
+      VITE_SUPABASE_URL: https://kkjuiwytzkrmsuectqto.supabase.co
+      VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_VmC1SnHuoa-ht9ALD2jo6g_ob6x9nVP
+      # Dedicated test account; GitHub masks both values in the log.
+      E2E_TEST_EMAIL: ${{ secrets.E2E_TEST_EMAIL }}
+      E2E_TEST_PASSWORD: ${{ secrets.E2E_TEST_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+      # Screenshots only: traces and videos would capture the typed password.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-screenshots
+          path: test-results/**/*.png
+          if-no-files-found: ignore
+          retention-days: 7
