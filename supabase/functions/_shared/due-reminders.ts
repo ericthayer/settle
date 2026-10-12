@@ -64,13 +64,8 @@ export async function sendDueReminders(
     try {
       if (!(await store.claim(invoiceId, step))) continue
     } catch (error) {
-      fail(invoiceId, error)
-      // The claim may have been saved before the error (a lost response): give it back.
-      try {
-        await store.release(invoiceId, step)
-      } catch (releaseError) {
-        fail(invoiceId, `step ${step} may stay claimed and not be retried: ${message(releaseError)}`)
-      }
+      // Not releasing: the claim may belong to another run that already sent this step.
+      fail(invoiceId, `could not claim step ${step} (if the claim was saved it stays held): ${message(error)}`)
       continue
     }
     let delivery: Delivery

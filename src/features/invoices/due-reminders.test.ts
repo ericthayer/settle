@@ -165,24 +165,21 @@ describe('sendDueReminders', () => {
     ])
   })
 
-  it('reports a failed claim once and gives back the step in case the claim was saved', async () => {
+  it('leaves a claim alone when claiming errors, since another run may hold it, and says the step may be held', async () => {
     const { store, claims } = memoryStore([{ invoice_id: 'a', reminder_step: 7 }], { a: context('a') }, { failClaim: true, taken: ['a:7'] })
+    let calls = 0
 
-    const result = await sendDueReminders(store, async () => sentOk('a'), config)
+    const result = await sendDueReminders(store, async () => {
+      calls += 1
+      return sentOk('a')
+    }, config)
 
-    expect(result).toEqual({ sent: 0, failed: [{ invoiceId: 'a', error: 'claim_automatic_reminder: connection refused' }] })
-    expect(claims.size).toBe(0)
-  })
-
-  it('says a step may stay claimed when a failed claim also could not be given back', async () => {
-    const { store } = memoryStore([{ invoice_id: 'a', reminder_step: 7 }], { a: context('a') }, { failClaim: true, failRelease: true })
-
-    const result = await sendDueReminders(store, async () => sentOk('a'), config)
-
-    expect(result.failed).toEqual([
-      { invoiceId: 'a', error: 'claim_automatic_reminder: connection refused' },
-      { invoiceId: 'a', error: 'step 7 may stay claimed and not be retried: release_automatic_reminder: upstream timeout' },
-    ])
+    expect(result).toEqual({
+      sent: 0,
+      failed: [{ invoiceId: 'a', error: 'could not claim step 7 (if the claim was saved it stays held): claim_automatic_reminder: connection refused' }],
+    })
+    expect(calls).toBe(0)
+    expect([...claims]).toEqual(['a:7'])
   })
 })
 
