@@ -361,6 +361,10 @@ export type Database = {
         Returns: InvoiceEmailRow
       }
       owner_today: { Args: { p_owner?: string }; Returns: string }
+      prepare_checkout: {
+        Args: { p_token: string }
+        Returns: Json
+      }
       recompute_invoice_totals: {
         Args: { p_invoice_id: string }
         Returns: undefined
@@ -379,6 +383,10 @@ export type Database = {
       save_invoice_draft: {
         Args: { p_invoice_id: string; p_invoice: Json; p_lines: Json }
         Returns: InvoiceRow
+      }
+      record_stripe_payment: {
+        Args: { p_amount_minor: number; p_currency: string; p_invoice_id: string; p_payload?: Json; p_provider_ref: string }
+        Returns: Json
       }
       revert_to_draft: {
         Args: { p_invoice_id: string }

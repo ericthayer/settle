@@ -24,3 +24,11 @@ verify_enabled = true
 # doesn't understand publishable keys or JWT signing keys.
 [functions.send-invoice-email]
 verify_jwt = false
+
+# Called signed out from the shared invoice page; the link token is the credential.
+[functions.create-checkout]
+verify_jwt = false
+
+# Called by Stripe; the Stripe-Signature header is verified inside the function.
+[functions.stripe-webhook]
+verify_jwt = false
