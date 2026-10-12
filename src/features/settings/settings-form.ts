@@ -29,6 +29,7 @@ export function settingsSchema(minNextNumber: number) {
     ),
     payment_instructions: z.string(),
     default_notes: z.string(),
+    auto_reminders: z.boolean(),
   })
 }
 
@@ -51,6 +52,7 @@ export function settingsToForm(row: BusinessSettings | null): SettingsFormValues
     next_invoice_number: String(row?.next_invoice_number ?? 1),
     payment_instructions: row?.payment_instructions ?? '',
     default_notes: row?.default_notes ?? '',
+    auto_reminders: row?.auto_reminders ?? false,
   }
 }
 
@@ -71,6 +73,7 @@ export function formToSettings(values: SettingsFormValues): BusinessSettingsInpu
     next_invoice_number: Number(values.next_invoice_number),
     payment_instructions: nullIfBlank(values.payment_instructions),
     default_notes: nullIfBlank(values.default_notes),
+    auto_reminders: values.auto_reminders,
   }
 }
 

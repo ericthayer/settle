@@ -44,6 +44,8 @@ type InvoiceEmailRow = {
   kind: Database["public"]["Enums"]["invoice_email_kind"]
   owner_id: string
   provider_message_id: string | null
+  /** Automatic reminders only: the schedule step, in days from the due date. */
+  reminder_step: number | null
   subject: string
   to_email: string
 }
@@ -77,6 +79,7 @@ export type Database = {
       business_settings: {
         Row: {
           address: Json
+          auto_reminders: boolean
           business_name: string
           created_at: string
           default_currency: string
@@ -99,6 +102,7 @@ export type Database = {
         }
         Insert: {
           address?: Json
+          auto_reminders?: boolean
           business_name: string
           created_at?: string
           default_currency?: string
@@ -121,6 +125,7 @@ export type Database = {
         }
         Update: {
           address?: Json
+          auto_reminders?: boolean
           business_name?: string
           created_at?: string
           default_currency?: string

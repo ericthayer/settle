@@ -18,6 +18,7 @@ const row = {
   payment_instructions: null,
   default_notes: null,
   logo_path: null,
+  auto_reminders: true,
 } as unknown as BusinessSettings
 
 describe('settings form', () => {
@@ -27,6 +28,12 @@ describe('settings form', () => {
     const out = formToSettings(values)
     expect(out).toMatchObject({ business_name: 'Thayer Design', default_tax_rate_bps: 825, next_invoice_number: 42, phone: null })
     expect(out.address).toEqual({ line1: '1 Main St', line2: '', city: 'Portland', region: '', postal_code: '', country: '' })
+  })
+
+  it('keeps the automatic reminders choice, off until the owner turns it on', () => {
+    expect(formToSettings(settingsToForm(row)).auto_reminders).toBe(true)
+    expect(formToSettings(settingsToForm({ ...row, auto_reminders: false })).auto_reminders).toBe(false)
+    expect(settingsToForm(null).auto_reminders).toBe(false)
   })
 
   it('starts first run with Net 30, USD and the browser time zone', () => {

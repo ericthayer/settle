@@ -8,7 +8,9 @@ export function nextEmailKind(invoice: Pick<InvoiceSummary, 'sent_at' | 'balance
 }
 
 /** One sentence for the invoice toolbar: "Emailed to ap@acme.com on Oct 9, 2026. 2 reminders, last on Oct 20, 2026." */
-export function emailHistoryText(emails: readonly Pick<InvoiceEmail, 'kind' | 'to_email' | 'created_at'>[]): string | null {
+export function emailHistoryText(
+  emails: readonly (Pick<InvoiceEmail, 'kind' | 'to_email' | 'created_at'> & Partial<Pick<InvoiceEmail, 'reminder_step'>>)[],
+): string | null {
   const invoices = emails.filter((e) => e.kind === 'invoice')
   const reminders = emails.filter((e) => e.kind === 'reminder')
   const first = invoices[0]
@@ -17,7 +19,9 @@ export function emailHistoryText(emails: readonly Pick<InvoiceEmail, 'kind' | 't
   if (first) parts.push(`Emailed to ${first.to_email} on ${day(first.created_at)}.`)
   const last = reminders.at(-1)
   if (last) {
-    parts.push(reminders.length === 1 ? `Reminder sent ${day(last.created_at)}.` : `${reminders.length} reminders, last on ${day(last.created_at)}.`)
+    const automatic = last.reminder_step != null
+    if (reminders.length === 1) parts.push(`${automatic ? 'Automatic reminder' : 'Reminder'} sent ${day(last.created_at)}.`)
+    else parts.push(`${reminders.length} reminders, last on ${day(last.created_at)}${automatic ? ' (automatic)' : ''}.`)
   }
   return parts.length > 0 ? parts.join(' ') : null
 }
