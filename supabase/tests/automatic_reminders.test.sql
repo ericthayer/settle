@@ -200,6 +200,14 @@ do $$ begin
   assert not public.has_deliverable_address(U&'ap@exa\feffmple.com', null), 'a byte-order mark inside is not deliverable';
   assert not public.has_deliverable_address(U&'ap@exa\2003mple.com', null), 'an em space inside is not deliverable';
 end $$;
+-- The same answers in a session that reads backslashes in string literals the old way.
+set standard_conforming_strings = off;
+do $$ begin
+  assert public.has_deliverable_address('ivan@example.com', null), 'a v in the address is not a vertical tab';
+  assert not public.has_deliverable_address('a@bxcom', null), 'the dot before the domain ending is a literal dot';
+  assert public.js_trim('vivid') = 'vivid', 'trim leaves letters alone';
+end $$;
+reset standard_conforming_strings;
 select public.claim_automatic_reminder('a1000000-0000-0000-0000-000000000005', 30);
 reset role;
 update public.invoice_emails set created_at = now() - interval '10 days';

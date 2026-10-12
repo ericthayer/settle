@@ -35,20 +35,29 @@ alter table public.automatic_reminder_claims enable row level security;
 create function public.reminder_schedule() returns int[]
 language sql immutable as $$ select array[-3, 1, 7, 14, 30] $$;
 
+-- What JavaScript's trim() and \s treat as whitespace, as a regex bracket body.
+-- Postgres's own \s depends on the locale and misses some of these. The setting pins
+-- how the backslashes below are read, whatever the calling session uses.
+create function public.js_whitespace() returns text
+language sql immutable set standard_conforming_strings = on as $$
+  select '\t\n\v\f\r    -     　﻿'
+$$;
+
+-- JavaScript's String.prototype.trim().
+create function public.js_trim(p_text text) returns text
+language sql immutable as $$
+  select regexp_replace(p_text, '^[' || ws || ']+|[' || ws || ']+$', '', 'g') from public.js_whitespace() ws
+$$;
+
 -- Mirrors resolveRecipients in deliver-invoice-email.ts: the client's address wins,
 -- else the invoice snapshot's, trimmed and checked against the same pattern (EMAIL_RE).
--- ws lists what JavaScript's trim() and \s treat as whitespace; Postgres's own \s
--- depends on the locale and misses some of them.
 create function public.has_deliverable_address(p_client_email text, p_snapshot_email text) returns boolean
-language sql immutable as $$
-  with ws(c) as (select '\t\n\v\f\r    -     　﻿'),
-  picked(addr, c) as (
-    select coalesce(
-      nullif(regexp_replace(p_client_email, '^[' || c || ']+|[' || c || ']+$', '', 'g'), ''),
-      regexp_replace(p_snapshot_email, '^[' || c || ']+|[' || c || ']+$', '', 'g')), c
-    from ws)
-  select coalesce(addr ~ ('^[^@,;<>' || c || ']+@[^@,;<>' || c || ']+\.[^@,;<>' || c || ']+$'), false)
-  from picked
+language sql immutable set standard_conforming_strings = on as $$
+  select coalesce(
+    coalesce(nullif(public.js_trim(p_client_email), ''), public.js_trim(p_snapshot_email))
+      ~ ('^[^@,;<>' || ws || ']+@[^@,;<>' || ws || ']+\.[^@,;<>' || ws || ']+$'),
+    false)
+  from public.js_whitespace() ws
 $$;
 
 create function public.due_reminders() returns table (invoice_id uuid, reminder_step int)
