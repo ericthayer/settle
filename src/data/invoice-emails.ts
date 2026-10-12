@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query'
-import { FunctionsHttpError } from '@supabase/supabase-js'
 import type { Enums, Tables } from '@/lib/database.types'
+import { functionErrorMessage } from '@/lib/function-errors'
 import { requireSupabase } from '@/lib/supabase'
 import { queryKeys } from './keys'
 
@@ -38,15 +38,6 @@ export function useInvoiceEmails(invoiceId: string | undefined): UseQueryResult<
   })
 }
 
-/** The function answers errors as { error: string }; surface that sentence. */
-async function functionErrorMessage(error: unknown): Promise<string> {
-  if (error instanceof FunctionsHttpError) {
-    const body: unknown = await (error.context as Response).json().catch(() => null)
-    if (body && typeof body === 'object' && 'error' in body && typeof body.error === 'string') return body.error
-  }
-  return error instanceof Error ? error.message : 'Couldn’t send the email. Try again.'
-}
-
 /** Sends through the send-invoice-email Edge Function, which holds the provider key. */
 export function useSendInvoiceEmail(): UseMutationResult<SendInvoiceEmailResult, Error, SendInvoiceEmailInput> {
   const qc = useQueryClient()
@@ -55,7 +46,7 @@ export function useSendInvoiceEmail(): UseMutationResult<SendInvoiceEmailResult,
       const { data, error } = await requireSupabase().functions.invoke<SendInvoiceEmailResult>('send-invoice-email', {
         body: { invoiceId, kind, requestId },
       })
-      if (error) throw new Error(await functionErrorMessage(error))
+      if (error) throw new Error(await functionErrorMessage(error, 'Couldn’t send the email. Try again.'))
       if (!data) throw new Error('Couldn’t send the email. Try again.')
       return data
     },

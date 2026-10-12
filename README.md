@@ -92,3 +92,26 @@ Replies go to the email address in Settings.
 Turn them on in Settings → Payment reminders (off by default). Once a day at 14:00 UTC a `pg_cron` job calls the `send-due-reminders` Edge Function, which emails every invoice whose current version has been emailed, that still has a balance and a usable client address, and that has reached a reminder step: 3 days before the due date, then 1, 7, 14 and 30 days after it, counted in the business time zone. Each step goes out at most once per issue of the invoice, only the latest step reached is sent and only within 6 days of its date (no catch-up bursts, and turning reminders on never mails long-overdue invoices), and nothing is sent within 3 days of any other email for that invoice. Re-issuing an invoice pauses its reminders until the new version is emailed.
 
 `20261012000000_automatic_reminders.sql` creates the job and a random `reminder_cron_secret` in Supabase Vault; the function accepts only calls carrying that secret, so there is nothing to copy by hand. Deploy with `supabase functions deploy send-due-reminders --no-verify-jwt`. It uses the same `RESEND_API_KEY`, `EMAIL_FROM` and `APP_URL` secrets. To run it once by hand, run the job's command from `select command from cron.job where jobname = 'send-due-reminders'` in the SQL editor; the response lands in `net._http_response`.
+
+## Card payments (Stripe)
+
+The shared invoice page (`/i/<token>`) offers **Pay by card** while an issued invoice has a balance. The `create-checkout` Edge Function opens a Stripe Checkout Session for the current balance (the amount always comes from the database). Stripe then calls `stripe-webhook`, which records the payment (`source = 'stripe'`, method Card) and the invoice moves to Paid on its own. Each payment is keyed by its PaymentIntent id (`payments.provider_ref`, unique), so Stripe retries and replays never record it twice.
+
+Deploy both functions without gateway JWT checks (one is called signed out, the other by Stripe):
+
+```bash
+supabase functions deploy create-checkout --no-verify-jwt
+supabase functions deploy stripe-webhook --no-verify-jwt
+```
+
+In Stripe → Developers → Webhooks, add an endpoint at `https://<project-ref>.supabase.co/functions/v1/stripe-webhook` for `checkout.session.completed` and `checkout.session.async_payment_succeeded`. Then set the secrets under Supabase → Edge Functions → Secrets:
+
+| Secret | Required | Value |
+|---|---|---|
+| `STRIPE_SECRET_KEY` | yes | Stripe secret key (`sk_test_…` while testing) |
+| `STRIPE_WEBHOOK_SECRET` | yes | The webhook endpoint's signing secret (`whsec_…`) |
+| `SITE_URL` | no | The app's URL for Checkout's return links; defaults to production. Its deploy previews and localhost are also allowed. |
+
+Until `STRIPE_SECRET_KEY` is set, the button answers "Card payments aren't available for this invoice yet."
+
+Refunds are made in the Stripe dashboard; remove the payment in Settle afterwards. If a client pays twice (two tabs), both payments are recorded and the balance shows the overpayment to refund.
