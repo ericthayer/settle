@@ -15,11 +15,8 @@
 // keys, which the gateway check doesn't understand, so the session is verified below.
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { buildInvoiceEmail, fromHeader, type InvoiceEmailKind } from '../_shared/invoice-email.ts'
-
-const DEFAULT_FROM = 'onboarding@resend.dev'
-const DEFAULT_APP_URL = 'https://settle-invoices.netlify.app'
-const EMAIL_RE = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/
+import { DEFAULT_APP_URL, deliverInvoiceEmail } from '../_shared/deliver-invoice-email.ts'
+import type { InvoiceEmailKind } from '../_shared/invoice-email.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -42,12 +39,6 @@ function publishableKey(): string {
     if (parsed && typeof parsed === 'object' && 'default' in parsed && typeof parsed.default === 'string') return parsed.default
   }
   return Deno.env.get('SUPABASE_ANON_KEY') ?? ''
-}
-
-function snapshotString(snapshot: unknown, key: string): string | null {
-  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return null
-  const value = (snapshot as Record<string, unknown>)[key]
-  return typeof value === 'string' && value.trim() !== '' ? value.trim() : null
 }
 
 interface SendRequest {
@@ -94,63 +85,33 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (invoice.lifecycle !== 'issued') return fail(409, 'Only issued invoices can be emailed.')
   if (request.kind === 'reminder' && (invoice.balance_minor ?? 0) <= 0) return fail(409, 'This invoice is paid, so there’s nothing to remind about.')
 
-  // The client's current address wins over the snapshot, so a corrected email is used.
   const { data: client } = await db.from('clients').select('email, cc_emails').eq('id', invoice.client_id).maybeSingle()
-  const to = client?.email?.trim() || snapshotString(invoice.bill_to, 'email')
-  if (!to || !EMAIL_RE.test(to)) return fail(422, 'Add an email address to this client first.')
-  const cc = ((client?.cc_emails ?? []) as string[]).map((e) => e.trim()).filter((e) => EMAIL_RE.test(e) && e !== to)
-
   const { data: settings } = await db.from('business_settings').select('email').maybeSingle()
-  const businessName = snapshotString(invoice.bill_from, 'business_name') ?? 'Settle'
-  const replyTo = settings?.email?.trim() || snapshotString(invoice.bill_from, 'email')
 
   const { data: publicToken, error: tokenError } = await db.rpc('ensure_public_token', { p_invoice_id: invoice.id })
   if (tokenError || !publicToken) return fail(500, tokenError?.message ?? 'Couldn’t create the invoice link.')
   const appUrl = (Deno.env.get('APP_URL') ?? DEFAULT_APP_URL).replace(/\/+$/, '')
 
-  const email = buildInvoiceEmail({
+  const delivery = await deliverInvoiceEmail({
     kind: request.kind,
-    number: invoice.number ?? '',
-    businessName,
-    contactName: snapshotString(invoice.bill_to, 'contact_name'),
-    currency: invoice.currency ?? 'USD',
-    balanceMinor: invoice.balance_minor ?? invoice.total_minor ?? 0,
-    dueDate: invoice.due_date ?? '',
-    daysOverdue: invoice.days_overdue ?? 0,
-    paymentInstructions: invoice.payment_instructions,
+    invoice,
+    client,
+    businessEmail: settings?.email ?? null,
     viewUrl: `${appUrl}/i/${publicToken}`,
+    resendKey,
+    fromAddress: Deno.env.get('EMAIL_FROM'),
+    idempotencyKey: `${invoice.id}:${request.kind}:${request.requestId}`,
   })
-
-  const sent = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${resendKey}`,
-      'Content-Type': 'application/json',
-      'Idempotency-Key': `${invoice.id}:${request.kind}:${request.requestId}`,
-    },
-    body: JSON.stringify({
-      from: fromHeader(businessName, Deno.env.get('EMAIL_FROM')?.trim() || DEFAULT_FROM),
-      to: [to],
-      ...(cc.length > 0 ? { cc } : {}),
-      ...(replyTo && EMAIL_RE.test(replyTo) ? { reply_to: replyTo } : {}),
-      subject: email.subject,
-      html: email.html,
-      text: email.text,
-    }),
-  })
-  const result: { id?: string; message?: string } = await sent.json().catch(() => ({}))
-  if (!sent.ok) {
-    console.error('resend', sent.status, result.message)
-    return fail(502, `Email provider refused the message: ${result.message ?? sent.statusText}`)
-  }
+  if (!delivery.ok) return fail(delivery.status, delivery.error)
+  const { to, cc } = delivery
 
   const { data: logged, error: logError } = await db.rpc('log_invoice_email', {
     p_invoice_id: invoice.id,
     p_kind: request.kind,
     p_to: to,
     p_cc: cc,
-    p_subject: email.subject,
-    p_provider_message_id: result.id ?? null,
+    p_subject: delivery.subject,
+    p_provider_message_id: delivery.providerMessageId,
   })
   // The email is out; report success even if the log write failed.
   if (logError) console.error('log_invoice_email', logError.message)
