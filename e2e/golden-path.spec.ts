@@ -38,17 +38,21 @@ function statusBadge(page: Page, label: string): Locator {
 /** Fills Stripe's hosted Checkout page with the 4242 test card and submits it. */
 async function payWithTestCard(checkout: Page): Promise<void> {
   await expect(checkout).toHaveURL(/^https:\/\/checkout\.stripe\.com\//, { timeout: 30_000 })
-  // With several payment methods enabled, Checkout shows an accordion; pick card.
+  // With several payment methods enabled, Checkout lists them as radio rows; pick Card.
   const cardNumber = checkout.locator('#cardNumber')
-  const cardTab = checkout.getByTestId('card-accordion-item-button')
-  await expect(cardNumber.or(cardTab).first()).toBeVisible({ timeout: 30_000 })
-  if (await cardTab.isVisible()) await cardTab.click()
+  const cardRow = checkout.getByText('Card', { exact: true }).first()
+  await expect(cardNumber.or(cardRow).first()).toBeVisible({ timeout: 30_000 })
+  if (!(await cardNumber.isVisible())) await cardRow.click()
+  await expect(cardNumber).toBeVisible()
   await cardNumber.fill('4242 4242 4242 4242')
   await checkout.locator('#cardExpiry').fill('12 / 34')
   await checkout.locator('#cardCvc').fill('123')
   await checkout.locator('#billingName').fill('E2E Payer')
   const postal = checkout.locator('#billingPostalCode')
   if (await postal.isVisible().catch(() => false)) await postal.fill('10001')
+  // Link's "save my information" is on by default and would require a phone number.
+  const saveInfo = checkout.getByRole('checkbox', { name: /save my information/i })
+  if ((await saveInfo.count()) > 0 && (await saveInfo.first().isChecked())) await saveInfo.first().uncheck({ force: true })
   await checkout.getByTestId('hosted-payment-submit-button').click()
 }
 
