@@ -76,6 +76,11 @@ describe('email history', () => {
     const auto = { kind: 'reminder' as const, to_email: 'ap@acme.com', created_at: '2026-10-20T14:00:00Z', reminder_step: 7 }
     expect(emailHistoryText([sent, auto])).toBe('Emailed to ap@acme.com on Oct 9, 2026. Automatic reminder sent Oct 20, 2026.')
     const manual = { ...auto, created_at: '2026-10-15T10:00:00Z', reminder_step: null }
-    expect(emailHistoryText([sent, manual, auto])).toBe('Emailed to ap@acme.com on Oct 9, 2026. 2 reminders, last on Oct 20, 2026 (automatic).')
+    expect(emailHistoryText([sent, manual, auto])).toBe('Emailed to ap@acme.com on Oct 9, 2026. 2 reminders (1 automatic), last on Oct 20, 2026.')
+    const later = { ...manual, created_at: '2026-10-28T10:00:00Z' }
+    expect(emailHistoryText([sent, auto, later])).toBe('Emailed to ap@acme.com on Oct 9, 2026. 2 reminders (1 automatic), last on Oct 28, 2026.')
+    expect(emailHistoryText([sent, auto, { ...auto, created_at: '2026-10-27T14:00:00Z', reminder_step: 14 }])).toBe(
+      'Emailed to ap@acme.com on Oct 9, 2026. 2 automatic reminders, last on Oct 27, 2026.',
+    )
   })
 })
