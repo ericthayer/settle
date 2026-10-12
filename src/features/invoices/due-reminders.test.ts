@@ -165,7 +165,7 @@ describe('sendDueReminders', () => {
     ])
   })
 
-  it('leaves a claim alone when claiming errors, since another run may hold it, and says the step may be held', async () => {
+  it('leaves the claim alone when claiming errors, since another run may hold it', async () => {
     const { store, claims } = memoryStore([{ invoice_id: 'a', reminder_step: 7 }], { a: context('a') }, { failClaim: true, taken: ['a:7'] })
     let calls = 0
 
