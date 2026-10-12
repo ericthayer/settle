@@ -75,7 +75,7 @@ Netlify builds `main` with `netlify.toml`. Set `VITE_SUPABASE_URL` and `VITE_SUP
 
 ## Email
 
-Invoices and reminders are sent from the invoice view (and the dashboard follow-up list) by the `send-invoice-email` Edge Function through [Resend](https://resend.com). The email links to `/i/<token>`, a signed-out, read-only copy of the invoice where the client can save the PDF. Reminders are manual.
+Invoices and reminders are sent from the invoice view (and the dashboard follow-up list) by the `send-invoice-email` Edge Function through [Resend](https://resend.com). The email links to `/i/<token>`, a signed-out, read-only copy of the invoice where the client can save the PDF.
 
 Deploy the function with `supabase functions deploy send-invoice-email --no-verify-jwt` (it verifies the session itself), then set its secrets under Supabase → Edge Functions → Secrets:
 
@@ -86,3 +86,9 @@ Deploy the function with `supabase functions deploy send-invoice-email --no-veri
 | `APP_URL` | no | Base URL for invoice links; defaults to production |
 
 Replies go to the email address in Settings.
+
+### Automatic reminders
+
+Turn them on in Settings → Payment reminders (off by default). Once a day at 14:00 UTC a `pg_cron` job calls the `send-due-reminders` Edge Function, which emails every invoice that has been emailed, still has a balance, and has reached a reminder step: 3 days before the due date, then 1, 7, 14 and 30 days after it, counted in the business time zone. Each step goes out at most once, only the latest step reached is sent (no catch-up bursts), and nothing is sent within 3 days of any other email for that invoice.
+
+`20261012000000_automatic_reminders.sql` creates the job and a random `reminder_cron_secret` in Supabase Vault; the function accepts only calls carrying that secret, so there is nothing to copy by hand. Deploy with `supabase functions deploy send-due-reminders --no-verify-jwt`. It uses the same `RESEND_API_KEY`, `EMAIL_FROM` and `APP_URL` secrets. To run it once by hand, run the job's command from `select command from cron.job where jobname = 'send-due-reminders'` in the SQL editor; the response lands in `net._http_response`.
