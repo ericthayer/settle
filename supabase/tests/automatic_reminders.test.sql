@@ -192,6 +192,13 @@ do $$ begin
   assert public.has_deliverable_address('  ', 'ap@example.com'), 'blank client address: the snapshot one is used';
   assert not public.has_deliverable_address('a p@example.com', null), 'an address with a space inside is not deliverable';
   assert not public.has_deliverable_address(null, null), 'no address anywhere';
+  -- JavaScript's trim() and \s, which the sender uses, cover all Unicode spaces and U+FEFF.
+  assert public.has_deliverable_address('ap@example.com' || chr(11), null), 'a trailing vertical tab is trimmed';
+  assert public.has_deliverable_address(chr(11) || U&'\3000', 'ap@example.com'), 'a client address of only a vertical tab and an ideographic space is blank';
+  assert public.has_deliverable_address(U&'\3000ap@example.com\2003', null), 'leading and trailing Unicode spaces are trimmed';
+  assert public.has_deliverable_address(U&'\2028', 'ap@example.com'), 'a client address of only a line separator is blank';
+  assert not public.has_deliverable_address(U&'ap@exa\feffmple.com', null), 'a byte-order mark inside is not deliverable';
+  assert not public.has_deliverable_address(U&'ap@exa\2003mple.com', null), 'an em space inside is not deliverable';
 end $$;
 select public.claim_automatic_reminder('a1000000-0000-0000-0000-000000000005', 30);
 reset role;

@@ -37,12 +37,18 @@ language sql immutable as $$ select array[-3, 1, 7, 14, 30] $$;
 
 -- Mirrors resolveRecipients in deliver-invoice-email.ts: the client's address wins,
 -- else the invoice snapshot's, trimmed and checked against the same pattern (EMAIL_RE).
+-- ws lists what JavaScript's trim() and \s treat as whitespace; Postgres's own \s
+-- depends on the locale and misses some of them.
 create function public.has_deliverable_address(p_client_email text, p_snapshot_email text) returns boolean
 language sql immutable as $$
-  select coalesce(
-    coalesce(nullif(btrim(p_client_email, E' \t\r\n\u00a0'), ''), btrim(p_snapshot_email, E' \t\r\n\u00a0'))
-      ~ '^[^\s\u00a0@,;<>]+@[^\s\u00a0@,;<>]+\.[^\s\u00a0@,;<>]+$',
-    false)
+  with ws(c) as (select '\t\n\v\f\r    -     　﻿'),
+  picked(addr, c) as (
+    select coalesce(
+      nullif(regexp_replace(p_client_email, '^[' || c || ']+|[' || c || ']+$', '', 'g'), ''),
+      regexp_replace(p_snapshot_email, '^[' || c || ']+|[' || c || ']+$', '', 'g')), c
+    from ws)
+  select coalesce(addr ~ ('^[^@,;<>' || c || ']+@[^@,;<>' || c || ']+\.[^@,;<>' || c || ']+$'), false)
+  from picked
 $$;
 
 create function public.due_reminders() returns table (invoice_id uuid, reminder_step int)
