@@ -25,6 +25,10 @@ verify_enabled = true
 [functions.send-invoice-email]
 verify_jwt = false
 
+# Called by the daily pg_cron job; the x-reminder-secret header is checked inside the function.
+[functions.send-due-reminders]
+verify_jwt = false
+
 # Called signed out from the shared invoice page; the link token is the credential.
 [functions.create-checkout]
 verify_jwt = false

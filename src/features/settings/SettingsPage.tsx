@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useId, type ReactNode } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from 'react-router'
@@ -75,6 +75,7 @@ function SettingsForm({ settings }: { readonly settings: BusinessSettings | null
     }
   }
 
+  const remindersHintId = useId()
   const defaultTimezone = form.formState.defaultValues?.timezone
   const ownerId = state.status === 'signed-in' ? state.session.user.id : ''
 
@@ -166,6 +167,19 @@ function SettingsForm({ settings }: { readonly settings: BusinessSettings | null
           <Field label="Default notes" hint="A thank-you or terms line added to new invoices.">
             <Textarea rows={3} {...register('default_notes')} />
           </Field>
+        </FormSection>
+
+        <FormSection title="Payment reminders">
+          <label className="flex items-start gap-3 text-sm">
+            <input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-accent" aria-describedby={remindersHintId} {...register('auto_reminders')} />
+            <span className="flex flex-col gap-1">
+              <span className="font-medium text-ink">Email reminders automatically</span>
+              <span id={remindersHintId} className="text-ink-muted">
+                Emailed invoices with a balance get a reminder 3 days before they’re due, then 1, 7, 14 and 30 days after. Nothing goes out
+                within 3 days of another email, and reminders stop once an invoice is paid or voided.
+              </span>
+            </span>
+          </label>
         </FormSection>
 
         {/* Outside the saved fields: its buttons are type="button" and never submit. */}
