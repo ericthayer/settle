@@ -61,9 +61,15 @@ export async function sendDueReminders(
 
   for (const due of await store.dueReminders()) {
     const { invoice_id: invoiceId, reminder_step: step } = due
-    let delivery: Delivery
+    // A failed claim holds nothing, so there is nothing to give back.
     try {
       if (!(await store.claim(invoiceId, step))) continue
+    } catch (error) {
+      fail(invoiceId, error)
+      continue
+    }
+    let delivery: Delivery
+    try {
       const ctx = await store.context(invoiceId)
       if (!ctx) {
         await release(invoiceId, step)

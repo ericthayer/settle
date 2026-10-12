@@ -27,6 +27,7 @@ interface MemoryOptions {
   readonly taken?: readonly string[]
   readonly failLog?: boolean
   readonly failRelease?: boolean
+  readonly failClaim?: boolean
 }
 
 /** In-memory store: due steps, invoice contexts, claims held, and reminders logged. */
@@ -36,6 +37,7 @@ function memoryStore(due: DueReminder[], contexts: Record<string, ReminderContex
   const store: ReminderStore = {
     dueReminders: async () => due,
     claim: async (invoiceId, step) => {
+      if (options.failClaim) throw new Error('claim_automatic_reminder: connection refused')
       const key = `${invoiceId}:${step}`
       if (claims.has(key)) return false
       claims.add(key)
@@ -161,6 +163,17 @@ describe('sendDueReminders', () => {
       { invoiceId: 'a', error: 'Email provider refused the message: down' },
       { invoiceId: 'a', error: 'step 7 stays claimed and will not be retried: release_automatic_reminder: upstream timeout' },
     ])
+  })
+
+  it('reports a claim that failed once, without trying to give back a step it never held', async () => {
+    let releases = 0
+    const { store } = memoryStore([{ invoice_id: 'a', reminder_step: 7 }], { a: context('a') }, { failClaim: true })
+    const counted: ReminderStore = { ...store, release: async (id, step) => { releases += 1; await store.release(id, step) } }
+
+    const result = await sendDueReminders(counted, async () => sentOk('a'), config)
+
+    expect(result).toEqual({ sent: 0, failed: [{ invoiceId: 'a', error: 'claim_automatic_reminder: connection refused' }] })
+    expect(releases).toBe(0)
   })
 })
 
