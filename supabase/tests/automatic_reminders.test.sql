@@ -25,6 +25,8 @@ select pg_temp.sent_invoice('a1000000-0000-0000-0000-000000000001', -1);
 
 -- The invoice emails above went out "now"; age them past the 3-day quiet period.
 reset role;
+-- Move just-issued invoices' issue time back, so emails aged below still come after it.
+set session_replication_role = replica; update public.invoices set issued_at = now() - interval '60 days' where issued_at > now() - interval '1 hour'; reset session_replication_role;
 update public.invoice_emails set created_at = now() - interval '10 days';
 
 set role service_role;
@@ -33,12 +35,21 @@ do $$ begin
     'one day overdue is due the +1 reminder';
 end $$;
 
--- Each step is logged once; a logged step is no longer due.
+-- A run claims a step before sending it: once per issued invoice, so a second run
+-- can't send it again. A failed send releases the claim; a sent one is logged.
 do $$ begin
-  assert public.log_automatic_reminder('a1000000-0000-0000-0000-000000000001', 1, 'ap@example.com', '{}', 'Reminder', 'msg_a1'),
-    'first log of a step records it';
-  assert not public.log_automatic_reminder('a1000000-0000-0000-0000-000000000001', 1, 'ap@example.com', '{}', 'Reminder', 'msg_a1b'),
-    'a repeated step is not logged twice';
+  assert public.claim_automatic_reminder('a1000000-0000-0000-0000-000000000001', -3), 'an earlier step can be claimed';
+  assert (select reminder_step from public.due_reminders() where invoice_id = 'a1000000-0000-0000-0000-000000000001') = 1,
+    'a claim on another step does not block this one';
+  assert public.claim_automatic_reminder('a1000000-0000-0000-0000-000000000001', 1), 'first claim of a step wins';
+  assert not public.claim_automatic_reminder('a1000000-0000-0000-0000-000000000001', 1), 'the same step cannot be claimed twice';
+  assert not exists (select 1 from public.due_reminders() where invoice_id = 'a1000000-0000-0000-0000-000000000001'),
+    'a claimed step is not due again';
+  perform public.release_automatic_reminder('a1000000-0000-0000-0000-000000000001', 1);
+  assert (select reminder_step from public.due_reminders() where invoice_id = 'a1000000-0000-0000-0000-000000000001') = 1,
+    'a released step is due again';
+  assert public.claim_automatic_reminder('a1000000-0000-0000-0000-000000000001', 1);
+  perform public.log_automatic_reminder('a1000000-0000-0000-0000-000000000001', 1, 'ap@example.com', '{}', 'Reminder', 'msg_a1');
 end $$;
 reset role;
 update public.invoice_emails set created_at = now() - interval '10 days';
@@ -65,6 +76,8 @@ do $$ begin
     'an invoice emailed today gets no automatic reminder';
 end $$;
 reset role;
+-- Move just-issued invoices' issue time back, so emails aged below still come after it.
+set session_replication_role = replica; update public.invoices set issued_at = now() - interval '60 days' where issued_at > now() - interval '1 hour'; reset session_replication_role;
 update public.invoice_emails set created_at = now() - interval '2 days 23 hours' where invoice_id = 'a1000000-0000-0000-0000-000000000002';
 set role service_role;
 do $$ begin
@@ -85,7 +98,17 @@ set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
 select pg_temp.sent_invoice('a1000000-0000-0000-0000-000000000003', 3);
 select pg_temp.sent_invoice('a1000000-0000-0000-0000-000000000004', 4);
-select pg_temp.sent_invoice('a1000000-0000-0000-0000-000000000005', -45);
+select pg_temp.sent_invoice('a1000000-0000-0000-0000-000000000005', -36);
+select pg_temp.sent_invoice('a1000000-0000-0000-0000-000000000010', -37);
+select pg_temp.sent_invoice('a1000000-0000-0000-0000-000000000011', -21);
+-- Client without a usable address, on the invoice or the client.
+insert into public.clients (id, name, email) values ('a0000000-0000-0000-0000-000000000003', 'Bad email', 'ap at example');
+insert into public.invoices (id, client_id, currency, due_date) values ('a1000000-0000-0000-0000-000000000012', 'a0000000-0000-0000-0000-000000000003', 'USD', current_date - 10);
+insert into public.invoice_line_items (invoice_id, position, description, quantity, unit_price_minor) values ('a1000000-0000-0000-0000-000000000012', 0, 'Work', 1, 10000);
+select public.issue_invoice('a1000000-0000-0000-0000-000000000012', current_date - 90);
+select public.log_invoice_email('a1000000-0000-0000-0000-000000000012', 'invoice', 'someone@example.com', '{}', 'Invoice', null);
+-- Address removed from the client after issue: the invoice snapshot still has one.
+select pg_temp.sent_invoice('a1000000-0000-0000-0000-000000000013', -10);
 -- Not emailed yet: issued only.
 insert into public.invoices (id, client_id, currency, due_date) values ('a1000000-0000-0000-0000-000000000006', 'a0000000-0000-0000-0000-000000000001', 'USD', current_date - 10);
 insert into public.invoice_line_items (invoice_id, position, description, quantity, unit_price_minor) values ('a1000000-0000-0000-0000-000000000006', 0, 'Work', 1, 10000);
@@ -99,6 +122,11 @@ select public.void_invoice('a1000000-0000-0000-0000-000000000008', 'Cancelled');
 select pg_temp.sent_invoice('a1000000-0000-0000-0000-000000000009', -10);
 select public.record_payment('a1000000-0000-0000-0000-000000000009', 4000, current_date, 'ach', null, null);
 
+reset role;
+update public.clients set email = null where id = 'a0000000-0000-0000-0000-000000000001';
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+
 -- An owner who hasn't turned automatic reminders on.
 set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a2';
 insert into public.business_settings (business_name, timezone) values ('Quiet Co', 'UTC');
@@ -109,20 +137,30 @@ select public.issue_invoice('a2000000-0000-0000-0000-000000000001', current_date
 select public.log_invoice_email('a2000000-0000-0000-0000-000000000001', 'invoice', 'ap@example.com', '{}', 'Invoice', null);
 
 reset role;
+-- Move just-issued invoices' issue time back, so emails aged below still come after it.
+set session_replication_role = replica; update public.invoices set issued_at = now() - interval '60 days' where issued_at > now() - interval '1 hour'; reset session_replication_role;
 update public.invoice_emails set created_at = now() - interval '10 days' where invoice_id <> 'a1000000-0000-0000-0000-000000000002';
 set role service_role;
 create temp table due as select * from public.due_reminders();
 do $$ begin
   assert (select reminder_step from due where invoice_id = 'a1000000-0000-0000-0000-000000000003') = -3, 'due in 3 days gets the early reminder';
   assert not exists (select 1 from due where invoice_id = 'a1000000-0000-0000-0000-000000000004'), 'due in 4 days: nothing yet';
-  assert (select reminder_step from due where invoice_id = 'a1000000-0000-0000-0000-000000000005') = 30, '45 days late: the +30 reminder';
+  assert (select reminder_step from due where invoice_id = 'a1000000-0000-0000-0000-000000000005') = 30, '36 days late: the +30 reminder';
+  assert not exists (select 1 from due where invoice_id = 'a1000000-0000-0000-0000-000000000010'),
+    '37 days late: the +30 reminder is more than 6 days old, so nothing (turning reminders on never mails old invoices)';
+  assert not exists (select 1 from due where invoice_id = 'a1000000-0000-0000-0000-000000000011'), '21 days late: +14 is a week old, +30 not reached';
+  assert not exists (select 1 from due where invoice_id = 'a1000000-0000-0000-0000-000000000012'), 'no usable email on the client or the invoice: no reminder';
   assert not exists (select 1 from due where invoice_id = 'a1000000-0000-0000-0000-000000000006'), 'never emailed: no reminder';
   assert not exists (select 1 from due where invoice_id = 'a1000000-0000-0000-0000-000000000007'), 'paid: no reminder';
   assert not exists (select 1 from due where invoice_id = 'a1000000-0000-0000-0000-000000000008'), 'void: no reminder';
   assert (select reminder_step from due where invoice_id = 'a1000000-0000-0000-0000-000000000009') = 7, 'partly paid: still reminded';
+  assert (select reminder_step from due where invoice_id = 'a1000000-0000-0000-0000-000000000013') = 7,
+    'address removed from the client but on the invoice snapshot: still reminded';
+  assert not public.claim_automatic_reminder('a1000000-0000-0000-0000-000000000007', 7), 'a paid invoice cannot be claimed';
+  assert not public.claim_automatic_reminder('a1000000-0000-0000-0000-000000000008', 7), 'a void invoice cannot be claimed';
   assert not exists (select 1 from due where invoice_id = 'a2000000-0000-0000-0000-000000000001'), 'owner opted out: no reminder';
 end $$;
-select public.log_automatic_reminder('a1000000-0000-0000-0000-000000000005', 30, 'ap@example.com', '{}', 'Reminder', null);
+select public.claim_automatic_reminder('a1000000-0000-0000-0000-000000000005', 30);
 reset role;
 update public.invoice_emails set created_at = now() - interval '10 days';
 set role service_role;
@@ -146,6 +184,11 @@ do $$ begin
     raise exception 'authenticated must not log automatic reminders';
   exception when insufficient_privilege then null;
   end;
+  begin
+    perform public.claim_automatic_reminder('a1000000-0000-0000-0000-000000000003', -3);
+    raise exception 'authenticated must not claim automatic reminders';
+  exception when insufficient_privilege then null;
+  end;
 end $$;
 reset role;
 
@@ -162,5 +205,45 @@ do $$ begin
   assert not public.reminder_cron_secret_matches((select s from cron_secret) || 'x'), 'anything else does not';
   assert not public.reminder_cron_secret_matches(''), 'empty does not match';
   assert not public.reminder_cron_secret_matches(null), 'null does not match';
+end $$;
+reset role;
+
+-- Revert, edit and re-issue: nothing automatic until the new version is emailed,
+-- and then its schedule starts fresh.
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+reset role;
+update public.clients set email = 'ap@example.com' where id = 'a0000000-0000-0000-0000-000000000001';
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+select pg_temp.sent_invoice('a1000000-0000-0000-0000-000000000020', -8);
+reset role;
+set session_replication_role = replica;
+update public.invoices set issued_at = now() - interval '60 days' where id = 'a1000000-0000-0000-0000-000000000020';
+reset session_replication_role;
+update public.invoice_emails set created_at = now() - interval '10 days' where invoice_id = 'a1000000-0000-0000-0000-000000000020';
+set role service_role;
+select public.claim_automatic_reminder('a1000000-0000-0000-0000-000000000020', 7);
+set role authenticated;
+select public.revert_to_draft('a1000000-0000-0000-0000-000000000020');
+update public.invoice_line_items set unit_price_minor = 20000 where invoice_id = 'a1000000-0000-0000-0000-000000000020';
+select public.issue_invoice('a1000000-0000-0000-0000-000000000020', current_date - 90);
+set role service_role;
+do $$ begin
+  assert not exists (select 1 from public.due_reminders() where invoice_id = 'a1000000-0000-0000-0000-000000000020'),
+    'a re-issued invoice that was not emailed again gets no reminder';
+end $$;
+set role authenticated;
+select public.log_invoice_email('a1000000-0000-0000-0000-000000000020', 'invoice', 'ap@example.com', '{}', 'Invoice (corrected)', null);
+reset role;
+-- The corrected version was issued 5 days ago and emailed 4 days ago; the first email is older.
+set session_replication_role = replica;
+update public.invoices set issued_at = now() - interval '5 days' where id = 'a1000000-0000-0000-0000-000000000020';
+reset session_replication_role;
+update public.invoice_emails set created_at = now() - interval '4 days' where invoice_id = 'a1000000-0000-0000-0000-000000000020' and subject = 'Invoice (corrected)';
+set role service_role;
+do $$ begin
+  assert (select reminder_step from public.due_reminders() where invoice_id = 'a1000000-0000-0000-0000-000000000020') = 7,
+    'once the new version is emailed, its schedule starts fresh';
 end $$;
 reset role;

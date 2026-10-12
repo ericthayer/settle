@@ -1,48 +1,100 @@
 -- Automatic payment reminders.
 --
 -- Once a day pg_cron calls the send-due-reminders Edge Function. It asks
--- due_reminders() which sent, unpaid invoices have reached a schedule step that
--- hasn't been emailed, sends each one reminder, and records it with
--- log_automatic_reminder. Owners opt in with business_settings.auto_reminders.
+-- due_reminders() which invoices have reached a reminder step, claims each step
+-- with claim_automatic_reminder before sending, releases the claim if the send
+-- fails, and logs a sent reminder with log_automatic_reminder. Owners opt in with
+-- business_settings.auto_reminders.
 --
--- Rules: steps are days from the due date (reminder_schedule); only the latest
--- step reached is sent, so a missed day never sends a burst; nothing goes out
--- within 3 days of any email for the invoice, manual ones included; each step is
--- sent at most once per invoice (unique index), and the schedule stops once the
--- invoice is paid, voided or reverted to draft.
+-- Rules: steps are days from the due date (reminder_schedule), counted in the
+-- owner's time zone. Only the latest step reached is sent, and only within 6 days
+-- of its date, so a missed day never sends a burst and turning reminders on never
+-- mails long-overdue invoices. Only invoices whose current version was emailed and
+-- that have a usable recipient address qualify. Nothing goes out within 3 days of
+-- any email for the invoice, manual ones included. Each step is claimed once per
+-- issue of the invoice, and the schedule stops once it is paid, voided or reverted.
 
 alter table public.business_settings add column auto_reminders boolean not null default false;
 
 -- Set on automatic reminders only: the schedule step (days from the due date) it was sent for.
 alter table public.invoice_emails add column reminder_step int;
-create unique index invoice_emails_reminder_step_key on public.invoice_emails (invoice_id, reminder_step)
-  where reminder_step is not null;
+
+-- One row per step a run has taken on, keyed to the issue it belongs to, so a
+-- re-issued invoice starts a fresh schedule. RLS with no policies: only the
+-- service role (which bypasses RLS) reads or writes it.
+create table public.automatic_reminder_claims (
+  invoice_id uuid not null references public.invoices (id) on delete cascade,
+  issued_at timestamptz not null,
+  reminder_step int not null,
+  claimed_at timestamptz not null default now(),
+  primary key (invoice_id, issued_at, reminder_step)
+);
+alter table public.automatic_reminder_claims enable row level security;
 
 -- Days relative to the due date, in the owner's time zone: 3 days before, then 1, 7, 14 and 30 days late.
 create function public.reminder_schedule() returns int[]
 language sql immutable as $$ select array[-3, 1, 7, 14, 30] $$;
+
+-- Same shape the send functions accept (EMAIL_RE in deliver-invoice-email.ts).
+create function public.is_deliverable_email(p_email text) returns boolean
+language sql immutable as $$ select coalesce(p_email ~ '^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$', false) $$;
 
 create function public.due_reminders() returns table (invoice_id uuid, reminder_step int)
 language sql stable security invoker set search_path = public as $$
   select s.id, step.day
   from public.invoice_summary s
   join public.business_settings bs on bs.owner_id = s.owner_id and bs.auto_reminders
+  join public.clients c on c.id = s.client_id
   cross join lateral (
     select max(d) as day from unnest(public.reminder_schedule()) d where d <= s.today - s.due_date
   ) step
   where s.lifecycle = 'issued'
     and s.balance_minor > 0
-    and s.sent_at is not null
     and step.day is not null
+    and s.today - s.due_date - step.day < 7
+    -- The recipient the send would use: the client's address, else the invoice snapshot's.
+    and public.is_deliverable_email(coalesce(nullif(trim(c.email), ''), s.bill_to ->> 'email'))
+    -- The current version was emailed (a re-issued invoice must be sent again first).
+    and exists (
+      select 1 from public.invoice_emails e
+      where e.invoice_id = s.id and e.created_at >= s.issued_at)
     and not exists (
       select 1 from public.invoice_emails e
-      where e.invoice_id = s.id
-        and (e.reminder_step = step.day or e.created_at > now() - interval '3 days'));
+      where e.invoice_id = s.id and e.created_at > now() - interval '3 days')
+    and not exists (
+      select 1 from public.automatic_reminder_claims rc
+      where rc.invoice_id = s.id and rc.issued_at = s.issued_at and rc.reminder_step = step.day);
 $$;
 
-revoke execute on function public.due_reminders() from public, anon, authenticated;
-grant execute on function public.due_reminders() to service_role;
+-- Takes a step before sending it. False when another run already took it, or the
+-- invoice no longer has a balance on an issued invoice.
+create function public.claim_automatic_reminder(p_invoice_id uuid, p_step int) returns boolean
+language plpgsql security invoker set search_path = public as $$
+declare
+  v_issued_at timestamptz;
+begin
+  select issued_at into v_issued_at from public.invoice_summary
+    where id = p_invoice_id and lifecycle = 'issued' and balance_minor > 0;
+  if v_issued_at is null then
+    return false;
+  end if;
+  insert into public.automatic_reminder_claims (invoice_id, issued_at, reminder_step)
+  values (p_invoice_id, v_issued_at, p_step)
+  on conflict do nothing;
+  return found;
+end;
+$$;
 
+-- Gives a step back after a failed send, so the next run can try it again.
+create function public.release_automatic_reminder(p_invoice_id uuid, p_step int) returns void
+language sql security invoker set search_path = public as $$
+  delete from public.automatic_reminder_claims rc
+  using public.invoices i
+  where rc.invoice_id = p_invoice_id and rc.reminder_step = p_step
+    and i.id = rc.invoice_id and rc.issued_at = i.issued_at;
+$$;
+
+-- Records a sent automatic reminder in the invoice's email history.
 create function public.log_automatic_reminder(
   p_invoice_id uuid,
   p_step int,
@@ -50,27 +102,25 @@ create function public.log_automatic_reminder(
   p_cc text[],
   p_subject text,
   p_provider_message_id text default null
-) returns boolean
-language plpgsql security invoker set search_path = public as $$
-declare
-  inv public.invoices;
-  v_id uuid;
-begin
-  select * into inv from public.invoices where id = p_invoice_id;
-  if not found then
-    raise exception 'invoice % not found', p_invoice_id using errcode = 'no_data_found';
-  end if;
-
+) returns void
+language sql security invoker set search_path = public as $$
   insert into public.invoice_emails (owner_id, invoice_id, kind, to_email, cc_emails, subject, provider_message_id, reminder_step)
-  values (inv.owner_id, inv.id, 'reminder', p_to, coalesce(p_cc, '{}'), p_subject, p_provider_message_id, p_step)
-  on conflict (invoice_id, reminder_step) where reminder_step is not null do nothing
-  returning id into v_id;
-  return v_id is not null;
-end;
+  select i.owner_id, i.id, 'reminder', p_to, coalesce(p_cc, '{}'), p_subject, p_provider_message_id, p_step
+  from public.invoices i where i.id = p_invoice_id;
 $$;
 
-revoke execute on function public.log_automatic_reminder(uuid, int, text, text[], text, text) from public, anon, authenticated;
-grant execute on function public.log_automatic_reminder(uuid, int, text, text[], text, text) to service_role;
+revoke execute on function
+  public.due_reminders(),
+  public.claim_automatic_reminder(uuid, int),
+  public.release_automatic_reminder(uuid, int),
+  public.log_automatic_reminder(uuid, int, text, text[], text, text)
+from public, anon, authenticated;
+grant execute on function
+  public.due_reminders(),
+  public.claim_automatic_reminder(uuid, int),
+  public.release_automatic_reminder(uuid, int),
+  public.log_automatic_reminder(uuid, int, text, text[], text, text)
+to service_role;
 
 create function public.reminder_cron_secret_matches(p_secret text) returns boolean
 language plpgsql stable security definer set search_path = public as $$
