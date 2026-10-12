@@ -21,12 +21,23 @@ end;
 $$;
 grant execute on function pg_temp.sent_invoice(uuid, int) to authenticated;
 
+-- Tests age emails by rewriting created_at; this moves the issue time of invoices
+-- issued in this run (or one invoice) back first, so their emails still come after it.
+-- Issued invoices are frozen by trigger, so it runs with triggers off (superuser only).
+create function pg_temp.backdate_issues(p_age interval default '60 days', p_invoice uuid default null) returns void
+language plpgsql as $$
+begin
+  set local session_replication_role = replica;
+  update public.invoices set issued_at = now() - p_age
+    where (p_invoice is null and issued_at > now() - interval '1 hour') or id = p_invoice;
+end;
+$$;
+
 select pg_temp.sent_invoice('a1000000-0000-0000-0000-000000000001', -1);
 
 -- The invoice emails above went out "now"; age them past the 3-day quiet period.
 reset role;
--- Move just-issued invoices' issue time back, so emails aged below still come after it.
-set session_replication_role = replica; update public.invoices set issued_at = now() - interval '60 days' where issued_at > now() - interval '1 hour'; reset session_replication_role;
+select pg_temp.backdate_issues();
 update public.invoice_emails set created_at = now() - interval '10 days';
 
 set role service_role;
@@ -76,8 +87,7 @@ do $$ begin
     'an invoice emailed today gets no automatic reminder';
 end $$;
 reset role;
--- Move just-issued invoices' issue time back, so emails aged below still come after it.
-set session_replication_role = replica; update public.invoices set issued_at = now() - interval '60 days' where issued_at > now() - interval '1 hour'; reset session_replication_role;
+select pg_temp.backdate_issues();
 update public.invoice_emails set created_at = now() - interval '2 days 23 hours' where invoice_id = 'a1000000-0000-0000-0000-000000000002';
 set role service_role;
 do $$ begin
@@ -109,6 +119,22 @@ select public.issue_invoice('a1000000-0000-0000-0000-000000000012', current_date
 select public.log_invoice_email('a1000000-0000-0000-0000-000000000012', 'invoice', 'someone@example.com', '{}', 'Invoice', null);
 -- Address removed from the client after issue: the invoice snapshot still has one.
 select pg_temp.sent_invoice('a1000000-0000-0000-0000-000000000013', -10);
+-- Addresses with stray whitespace, which the send function trims: a tab on the client,
+-- and spaces on a snapshot whose client address was later removed.
+insert into public.clients (id, name, email) values
+  ('a0000000-0000-0000-0000-000000000004', 'Tab', E'ap4@example.com\t'),
+  ('a0000000-0000-0000-0000-000000000005', 'Spaces', ' ap5@example.com ');
+insert into public.invoices (id, client_id, currency, due_date) values
+  ('a1000000-0000-0000-0000-000000000014', 'a0000000-0000-0000-0000-000000000004', 'USD', current_date - 10),
+  ('a1000000-0000-0000-0000-000000000015', 'a0000000-0000-0000-0000-000000000005', 'USD', current_date - 10);
+insert into public.invoice_line_items (invoice_id, position, description, quantity, unit_price_minor) values
+  ('a1000000-0000-0000-0000-000000000014', 0, 'Work', 1, 10000),
+  ('a1000000-0000-0000-0000-000000000015', 0, 'Work', 1, 10000);
+select public.issue_invoice('a1000000-0000-0000-0000-000000000014', current_date - 90);
+select public.issue_invoice('a1000000-0000-0000-0000-000000000015', current_date - 90);
+select public.log_invoice_email('a1000000-0000-0000-0000-000000000014', 'invoice', 'ap4@example.com', '{}', 'Invoice', null);
+select public.log_invoice_email('a1000000-0000-0000-0000-000000000015', 'invoice', 'ap5@example.com', '{}', 'Invoice', null);
+update public.clients set email = null where id = 'a0000000-0000-0000-0000-000000000005';
 -- Not emailed yet: issued only.
 insert into public.invoices (id, client_id, currency, due_date) values ('a1000000-0000-0000-0000-000000000006', 'a0000000-0000-0000-0000-000000000001', 'USD', current_date - 10);
 insert into public.invoice_line_items (invoice_id, position, description, quantity, unit_price_minor) values ('a1000000-0000-0000-0000-000000000006', 0, 'Work', 1, 10000);
@@ -137,8 +163,7 @@ select public.issue_invoice('a2000000-0000-0000-0000-000000000001', current_date
 select public.log_invoice_email('a2000000-0000-0000-0000-000000000001', 'invoice', 'ap@example.com', '{}', 'Invoice', null);
 
 reset role;
--- Move just-issued invoices' issue time back, so emails aged below still come after it.
-set session_replication_role = replica; update public.invoices set issued_at = now() - interval '60 days' where issued_at > now() - interval '1 hour'; reset session_replication_role;
+select pg_temp.backdate_issues();
 update public.invoice_emails set created_at = now() - interval '10 days' where invoice_id <> 'a1000000-0000-0000-0000-000000000002';
 set role service_role;
 create temp table due as select * from public.due_reminders();
@@ -156,9 +181,17 @@ do $$ begin
   assert (select reminder_step from due where invoice_id = 'a1000000-0000-0000-0000-000000000009') = 7, 'partly paid: still reminded';
   assert (select reminder_step from due where invoice_id = 'a1000000-0000-0000-0000-000000000013') = 7,
     'address removed from the client but on the invoice snapshot: still reminded';
+  assert (select reminder_step from due where invoice_id = 'a1000000-0000-0000-0000-000000000014') = 7, 'client address with a trailing tab: still reminded';
+  assert (select reminder_step from due where invoice_id = 'a1000000-0000-0000-0000-000000000015') = 7, 'snapshot address with spaces: still reminded';
   assert not public.claim_automatic_reminder('a1000000-0000-0000-0000-000000000007', 7), 'a paid invoice cannot be claimed';
   assert not public.claim_automatic_reminder('a1000000-0000-0000-0000-000000000008', 7), 'a void invoice cannot be claimed';
   assert not exists (select 1 from due where invoice_id = 'a2000000-0000-0000-0000-000000000001'), 'owner opted out: no reminder';
+end $$;
+-- The address rule the send function applies: a blank client address falls back to the snapshot.
+do $$ begin
+  assert public.has_deliverable_address('  ', 'ap@example.com'), 'blank client address: the snapshot one is used';
+  assert not public.has_deliverable_address('a p@example.com', null), 'an address with a space inside is not deliverable';
+  assert not public.has_deliverable_address(null, null), 'no address anywhere';
 end $$;
 select public.claim_automatic_reminder('a1000000-0000-0000-0000-000000000005', 30);
 reset role;
@@ -210,17 +243,13 @@ reset role;
 
 -- Revert, edit and re-issue: nothing automatic until the new version is emailed,
 -- and then its schedule starts fresh.
-set role authenticated;
-set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
 reset role;
 update public.clients set email = 'ap@example.com' where id = 'a0000000-0000-0000-0000-000000000001';
 set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
 select pg_temp.sent_invoice('a1000000-0000-0000-0000-000000000020', -8);
 reset role;
-set session_replication_role = replica;
-update public.invoices set issued_at = now() - interval '60 days' where id = 'a1000000-0000-0000-0000-000000000020';
-reset session_replication_role;
+select pg_temp.backdate_issues('60 days', 'a1000000-0000-0000-0000-000000000020');
 update public.invoice_emails set created_at = now() - interval '10 days' where invoice_id = 'a1000000-0000-0000-0000-000000000020';
 set role service_role;
 select public.claim_automatic_reminder('a1000000-0000-0000-0000-000000000020', 7);
@@ -237,9 +266,7 @@ set role authenticated;
 select public.log_invoice_email('a1000000-0000-0000-0000-000000000020', 'invoice', 'ap@example.com', '{}', 'Invoice (corrected)', null);
 reset role;
 -- The corrected version was issued 5 days ago and emailed 4 days ago; the first email is older.
-set session_replication_role = replica;
-update public.invoices set issued_at = now() - interval '5 days' where id = 'a1000000-0000-0000-0000-000000000020';
-reset session_replication_role;
+select pg_temp.backdate_issues('5 days', 'a1000000-0000-0000-0000-000000000020');
 update public.invoice_emails set created_at = now() - interval '4 days' where invoice_id = 'a1000000-0000-0000-0000-000000000020' and subject = 'Invoice (corrected)';
 set role service_role;
 do $$ begin

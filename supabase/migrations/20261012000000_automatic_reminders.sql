@@ -35,9 +35,15 @@ alter table public.automatic_reminder_claims enable row level security;
 create function public.reminder_schedule() returns int[]
 language sql immutable as $$ select array[-3, 1, 7, 14, 30] $$;
 
--- Same shape the send functions accept (EMAIL_RE in deliver-invoice-email.ts).
-create function public.is_deliverable_email(p_email text) returns boolean
-language sql immutable as $$ select coalesce(p_email ~ '^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$', false) $$;
+-- Mirrors resolveRecipients in deliver-invoice-email.ts: the client's address wins,
+-- else the invoice snapshot's, trimmed and checked against the same pattern (EMAIL_RE).
+create function public.has_deliverable_address(p_client_email text, p_snapshot_email text) returns boolean
+language sql immutable as $$
+  select coalesce(
+    coalesce(nullif(btrim(p_client_email, E' \t\r\n\u00a0'), ''), btrim(p_snapshot_email, E' \t\r\n\u00a0'))
+      ~ '^[^\s\u00a0@,;<>]+@[^\s\u00a0@,;<>]+\.[^\s\u00a0@,;<>]+$',
+    false)
+$$;
 
 create function public.due_reminders() returns table (invoice_id uuid, reminder_step int)
 language sql stable security invoker set search_path = public as $$
@@ -52,8 +58,7 @@ language sql stable security invoker set search_path = public as $$
     and s.balance_minor > 0
     and step.day is not null
     and s.today - s.due_date - step.day < 7
-    -- The recipient the send would use: the client's address, else the invoice snapshot's.
-    and public.is_deliverable_email(coalesce(nullif(trim(c.email), ''), s.bill_to ->> 'email'))
+    and public.has_deliverable_address(c.email, s.bill_to ->> 'email')
     -- The current version was emailed (a re-issued invoice must be sent again first).
     and exists (
       select 1 from public.invoice_emails e
