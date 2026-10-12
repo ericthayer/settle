@@ -2,8 +2,8 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 import { cleanUpClient, invoiceSummary, testUser, testUserDb } from './support/test-user.ts'
 
 /**
- * Golden path: client → draft → issue → PDF totals → email + shared link →
- * partial payment → reminder → full payment → Paid.
+ * Golden path: reminders setting → client → draft → issue → PDF totals →
+ * email + shared link → partial payment → reminder → full payment → Paid.
  *
  * Email goes to Resend's test inbox, which accepts the message and delivers nothing.
  *
@@ -60,6 +60,26 @@ test('invoice → PDF → email → payment recorded', async ({ page, browser })
     await page.getByLabel('Business name').fill('Settle E2E')
     await page.getByRole('button', { name: 'Save and continue' }).click()
     await expect(page).toHaveURL(/\/clients\/new$/)
+  })
+
+  await test.step('turn automatic reminders on and off in Settings', async () => {
+    const reminders = page.getByRole('checkbox', { name: 'Email reminders automatically' })
+    const setTo = async (on: boolean): Promise<void> => {
+      await page.goto('/settings')
+      await reminders.setChecked(on)
+      await page.getByRole('button', { name: 'Save changes' }).click()
+      await expect(page.getByText('Settings saved')).toBeVisible()
+      await page.reload()
+      await expect(reminders).toBeChecked({ checked: on })
+      const { data, error } = await db.from('business_settings').select('auto_reminders').single()
+      if (error) throw error
+      expect(data.auto_reminders).toBe(on)
+    }
+    const { data: before, error } = await db.from('business_settings').select('auto_reminders').single()
+    if (error) throw error
+    // Flip it, then put the test account back the way it was.
+    await setTo(!before.auto_reminders)
+    await setTo(before.auto_reminders)
   })
 
   await test.step('create a client', async () => {
