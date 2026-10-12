@@ -2,7 +2,7 @@
 
 `golden-path.spec.ts` is the MVP gate: log in, create a client, build a two-line draft, issue it, check the printed totals against `invoice_summary` to the cent, email the invoice and open its shared link signed out, then record a partial payment, send a reminder, and settle the rest.
 
-The rest is recorded manually by default. With `E2E_STRIPE=1` the client pays it on the shared link by Stripe test card (4242…) instead, and the test waits for the `stripe-webhook` function to mark the invoice paid. That needs `create-checkout` and `stripe-webhook` deployed with Stripe **test** keys in their secrets. In CI, set the repository variable `E2E_STRIPE` to `1`.
+The rest is recorded manually by default. With `E2E_STRIPE=1` the client pays it on the shared link by Stripe test card (4242…) instead, and the test waits for the `stripe-webhook` function to mark the invoice paid. That needs `create-checkout` and `stripe-webhook` deployed with Stripe **test** keys in their secrets. In CI, set the repository variable (or secret) `E2E_STRIPE` to `1`.
 
 Email goes to Resend's test inbox `delivered@resend.dev` (accepted, never delivered), so the `send-invoice-email` function must be deployed with `RESEND_API_KEY` set.
 
