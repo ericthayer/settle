@@ -15,7 +15,7 @@
 // keys, which the gateway check doesn't understand, so the session is verified below.
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { DEFAULT_APP_URL, deliverInvoiceEmail } from '../_shared/deliver-invoice-email.ts'
+import { NO_ADDRESS, appUrl, deliverInvoiceEmail, resolveRecipients } from '../_shared/deliver-invoice-email.ts'
 import type { InvoiceEmailKind } from '../_shared/invoice-email.ts'
 
 const corsHeaders = {
@@ -86,18 +86,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (request.kind === 'reminder' && (invoice.balance_minor ?? 0) <= 0) return fail(409, 'This invoice is paid, so there’s nothing to remind about.')
 
   const { data: client } = await db.from('clients').select('email, cc_emails').eq('id', invoice.client_id).maybeSingle()
+  if (!resolveRecipients(client, invoice.bill_to)) return fail(422, NO_ADDRESS)
   const { data: settings } = await db.from('business_settings').select('email').maybeSingle()
 
   const { data: publicToken, error: tokenError } = await db.rpc('ensure_public_token', { p_invoice_id: invoice.id })
   if (tokenError || !publicToken) return fail(500, tokenError?.message ?? 'Couldn’t create the invoice link.')
-  const appUrl = (Deno.env.get('APP_URL') ?? DEFAULT_APP_URL).replace(/\/+$/, '')
 
   const delivery = await deliverInvoiceEmail({
     kind: request.kind,
     invoice,
     client,
     businessEmail: settings?.email ?? null,
-    viewUrl: `${appUrl}/i/${publicToken}`,
+    viewUrl: `${appUrl(Deno.env.get('APP_URL'))}/i/${publicToken}`,
     resendKey,
     fromAddress: Deno.env.get('EMAIL_FROM'),
     idempotencyKey: `${invoice.id}:${request.kind}:${request.requestId}`,

@@ -41,6 +41,8 @@ export type Delivery =
   | { readonly ok: true; readonly to: string; readonly cc: readonly string[]; readonly subject: string; readonly providerMessageId: string | null }
   | { readonly ok: false; readonly status: number; readonly error: string }
 
+export const NO_ADDRESS = 'Add an email address to this client first.'
+
 const EMAIL_RE = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/
 
 /** A non-blank string field of a jsonb snapshot (bill_to / bill_from). */
@@ -50,13 +52,28 @@ export function snapshotString(snapshot: unknown, key: string): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : null
 }
 
-export async function deliverInvoiceEmail(request: DeliveryRequest, fetchImpl: typeof fetch = fetch): Promise<Delivery> {
-  const { invoice, client } = request
+/** Base URL of invoice links: the APP_URL secret without trailing slashes, else production. */
+export function appUrl(configured: string | undefined): string {
+  return (configured ?? DEFAULT_APP_URL).replace(/\/+$/, '')
+}
 
-  // The client's current address wins over the snapshot, so a corrected email is used.
-  const to = client?.email?.trim() || snapshotString(invoice.bill_to, 'email')
-  if (!to || !EMAIL_RE.test(to)) return { ok: false, status: 422, error: 'Add an email address to this client first.' }
+/**
+ * To and CC for an invoice email, or null when there is no usable address. The
+ * client's current address wins over the invoice snapshot, so a corrected email is used.
+ */
+export function resolveRecipients(client: DeliveryRequest['client'], billTo: unknown): { to: string; cc: string[] } | null {
+  const to = client?.email?.trim() || snapshotString(billTo, 'email')
+  if (!to || !EMAIL_RE.test(to)) return null
   const cc = (client?.cc_emails ?? []).map((e) => e.trim()).filter((e) => EMAIL_RE.test(e) && e !== to)
+  return { to, cc }
+}
+
+export async function deliverInvoiceEmail(request: DeliveryRequest, fetchImpl: typeof fetch = fetch): Promise<Delivery> {
+  const { invoice } = request
+
+  const recipients = resolveRecipients(request.client, invoice.bill_to)
+  if (!recipients) return { ok: false, status: 422, error: NO_ADDRESS }
+  const { to, cc } = recipients
 
   const businessName = snapshotString(invoice.bill_from, 'business_name') ?? 'Settle'
   const replyTo = request.businessEmail?.trim() || snapshotString(invoice.bill_from, 'email')

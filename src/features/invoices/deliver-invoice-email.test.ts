@@ -1,4 +1,4 @@
-import { deliverInvoiceEmail, type DeliveryRequest } from '../../../supabase/functions/_shared/deliver-invoice-email.ts'
+import { appUrl, deliverInvoiceEmail, resolveRecipients, type DeliveryRequest } from '../../../supabase/functions/_shared/deliver-invoice-email.ts'
 
 const request: DeliveryRequest = {
   kind: 'reminder',
@@ -91,5 +91,21 @@ describe('deliverInvoiceEmail', () => {
     const result = await deliverInvoiceEmail(request, fetchImpl)
 
     expect(result).toEqual({ ok: false, status: 502, error: 'Email provider refused the message: Domain not verified' })
+  })
+})
+
+describe('resolveRecipients', () => {
+  it('lets a caller check the address before creating a share link', () => {
+    expect(resolveRecipients({ email: ' ap@acme.com ', cc_emails: ['x@acme.com'] }, {})).toEqual({ to: 'ap@acme.com', cc: ['x@acme.com'] })
+    expect(resolveRecipients(null, { email: 'old@acme.com' })).toEqual({ to: 'old@acme.com', cc: [] })
+    expect(resolveRecipients({ email: 'ap at acme', cc_emails: [] }, { email: 'old@acme.com' })).toBeNull()
+    expect(resolveRecipients({ email: null, cc_emails: [] }, null)).toBeNull()
+  })
+})
+
+describe('appUrl', () => {
+  it('uses APP_URL without trailing slashes, else production', () => {
+    expect(appUrl('https://deploy-preview-13--settle-invoices.netlify.app//')).toBe('https://deploy-preview-13--settle-invoices.netlify.app')
+    expect(appUrl(undefined)).toBe('https://settle-invoices.netlify.app')
   })
 })
