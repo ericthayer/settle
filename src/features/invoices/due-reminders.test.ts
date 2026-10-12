@@ -26,6 +26,7 @@ interface MemoryOptions {
   /** Steps another run already holds, as "invoice:step". */
   readonly taken?: readonly string[]
   readonly failLog?: boolean
+  readonly failRelease?: boolean
 }
 
 /** In-memory store: due steps, invoice contexts, claims held, and reminders logged. */
@@ -41,6 +42,7 @@ function memoryStore(due: DueReminder[], contexts: Record<string, ReminderContex
       return true
     },
     release: async (invoiceId, step) => {
+      if (options.failRelease) throw new Error('release_automatic_reminder: upstream timeout')
       claims.delete(`${invoiceId}:${step}`)
     },
     context: async (id) => contexts[id] ?? null,
@@ -148,6 +150,18 @@ describe('sendDueReminders', () => {
     expect(result).toEqual({ sent: 1, failed: [{ invoiceId: 'a', error: 'sent but not logged: connection reset' }] })
     expect([...claims]).toEqual(['a:7'])
   })
+
+  it('says so when a step it could not send also could not be given back', async () => {
+    const { store } = memoryStore([{ invoice_id: 'a', reminder_step: 7 }], { a: context('a') }, { failRelease: true })
+    const deliver = async (): Promise<Delivery> => ({ ok: false, status: 502, error: 'Email provider refused the message: down' })
+
+    const result = await sendDueReminders(store, deliver, config)
+
+    expect(result.failed).toEqual([
+      { invoiceId: 'a', error: 'Email provider refused the message: down' },
+      { invoiceId: 'a', error: 'step 7 stays claimed and will not be retried: release_automatic_reminder: upstream timeout' },
+    ])
+  })
 })
 
 describe('handleReminderRequest', () => {
@@ -187,6 +201,20 @@ describe('handleReminderRequest', () => {
 
     expect((await handleReminderRequest(post(), d)).status).toBe(401)
     expect((await handleReminderRequest(post('guess'), d)).status).toBe(401)
+    expect(runs).toEqual([])
+  })
+
+  it('answers 500 without running when the secret can’t be checked', async () => {
+    const { runs, deps: d } = deps()
+    const response = await handleReminderRequest(post('s3cret'), {
+      ...d,
+      secretMatches: async () => {
+        throw new Error('reminder_cron_secret_matches: connection refused')
+      },
+    })
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Could not verify the request' })
     expect(runs).toEqual([])
   })
 

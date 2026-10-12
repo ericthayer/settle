@@ -46,8 +46,17 @@ export async function sendDueReminders(
 ): Promise<ReminderRunResult> {
   let sent = 0
   const failed: { invoiceId: string; error: string }[] = []
+  const message = (error: unknown): string => (error instanceof Error ? error.message : String(error))
   const fail = (invoiceId: string, error: unknown): void => {
-    failed.push({ invoiceId, error: error instanceof Error ? error.message : String(error) })
+    failed.push({ invoiceId, error: message(error) })
+  }
+  // A step that can't be given back is skipped by every later run; say so rather than lose it quietly.
+  const release = async (invoiceId: string, step: number): Promise<void> => {
+    try {
+      await store.release(invoiceId, step)
+    } catch (error) {
+      fail(invoiceId, `step ${step} stays claimed and will not be retried: ${message(error)}`)
+    }
   }
 
   for (const due of await store.dueReminders()) {
@@ -57,7 +66,7 @@ export async function sendDueReminders(
       if (!(await store.claim(invoiceId, step))) continue
       const ctx = await store.context(invoiceId)
       if (!ctx) {
-        await store.release(invoiceId, step)
+        await release(invoiceId, step)
         continue
       }
       delivery = await deliver({
@@ -72,12 +81,12 @@ export async function sendDueReminders(
       })
     } catch (error) {
       fail(invoiceId, error)
-      await store.release(invoiceId, step).catch(() => undefined)
+      await release(invoiceId, step)
       continue
     }
     if (!delivery.ok) {
       fail(invoiceId, delivery.error)
-      await store.release(invoiceId, step).catch(() => undefined)
+      await release(invoiceId, step)
       continue
     }
 
@@ -107,7 +116,14 @@ function json(status: number, body: unknown): Response {
 export async function handleReminderRequest(req: Request, deps: ReminderRequestDeps): Promise<Response> {
   if (req.method !== 'POST') return json(405, { error: 'Method not allowed' })
   const secret = req.headers.get('x-reminder-secret') ?? ''
-  if (!(await deps.secretMatches(secret))) return json(401, { error: 'Unauthorized' })
+  let authorized: boolean
+  try {
+    authorized = await deps.secretMatches(secret)
+  } catch (error) {
+    console.error('secret check failed', error instanceof Error ? error.message : error)
+    return json(500, { error: 'Could not verify the request' })
+  }
+  if (!authorized) return json(401, { error: 'Unauthorized' })
   if (!deps.resendKey) {
     console.error('RESEND_API_KEY is not set')
     return json(503, { error: 'Email is not configured' })
